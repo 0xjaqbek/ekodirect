@@ -1,7 +1,20 @@
 // shared/api/index.ts
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { STORAGE_KEYS } from '../constants';
-import { ApiResponse } from '../types';
+
+// Define ApiResponse type locally to avoid import issues
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Define type for error response data
+interface ErrorResponseData {
+  message?: string;
+  error?: string;
+}
 
 // Konfiguracja API
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -43,22 +56,22 @@ axiosInstance.interceptors.request.use(
  */
 axiosInstance.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
+  async (error: AxiosError<ErrorResponseData>) => {
     const originalRequest = error.config;
     
     // Obsługa wygaśnięcia tokenu - próba odświeżenia
     if (
       error.response?.status === 401 &&
       originalRequest && 
-      !(originalRequest as any)._retry &&
+      !(originalRequest as { _retry?: boolean })._retry &&
       error.response.data?.message === 'Token expired'
     ) {
-      (originalRequest as any)._retry = true;
+      (originalRequest as { _retry?: boolean })._retry = true;
       
       try {
         // Wywołanie endpointu refresh token
         const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+        const response = await axios.post<{ token: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
         
         if (response.data.token) {
           localStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
@@ -104,7 +117,7 @@ export const apiClient = {
   /**
    * Wykonaj żądanie GET
    */
-  get: async <T>(url: string, params?: any): Promise<ApiResponse<T>> => {
+  get: async <T>(url: string, params?: Record<string, unknown>): Promise<ApiResponse<T>> => {
     try {
       const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.get(url, { params });
       return response.data;
@@ -119,7 +132,7 @@ export const apiClient = {
   /**
    * Wykonaj żądanie POST
    */
-  post: async <T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+  post: async <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
     try {
       const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.post(url, data, config);
       return response.data;
@@ -134,7 +147,7 @@ export const apiClient = {
   /**
    * Wykonaj żądanie PUT
    */
-  put: async <T>(url: string, data?: any): Promise<ApiResponse<T>> => {
+  put: async <T>(url: string, data?: unknown): Promise<ApiResponse<T>> => {
     try {
       const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.put(url, data);
       return response.data;
@@ -164,7 +177,7 @@ export const apiClient = {
   /**
    * Wyślij plik z multipart/form-data
    */
-  uploadFile: async <T>(url: string, file: File, fieldName: string = 'file', data?: Record<string, any>): Promise<ApiResponse<T>> => {
+  uploadFile: async <T>(url: string, file: File, fieldName = 'file', data?: Record<string, unknown>): Promise<ApiResponse<T>> => {
     try {
       const formData = new FormData();
       formData.append(fieldName, file);
@@ -172,7 +185,7 @@ export const apiClient = {
       // Dodaj dodatkowe dane jeśli podane
       if (data) {
         Object.entries(data).forEach(([key, value]) => {
-          formData.append(key, value);
+          formData.append(key, String(value));
         });
       }
       
@@ -194,7 +207,7 @@ export const apiClient = {
   /**
    * Wyślij wiele plików z multipart/form-data
    */
-  uploadFiles: async <T>(url: string, files: File[], fieldName: string = 'files', data?: Record<string, any>): Promise<ApiResponse<T>> => {
+  uploadFiles: async <T>(url: string, files: File[], fieldName = 'files', data?: Record<string, unknown>): Promise<ApiResponse<T>> => {
     try {
       const formData = new FormData();
       
@@ -206,7 +219,7 @@ export const apiClient = {
       // Dodaj dodatkowe dane jeśli podane
       if (data) {
         Object.entries(data).forEach(([key, value]) => {
-          formData.append(key, value);
+          formData.append(key, String(value));
         });
       }
       

@@ -164,8 +164,8 @@ export const createSlug = (text: string): string => {
     .replace(/ź/g, 'z')
     .replace(/ż/g, 'z')
     .replace(/\s+/g, '-')
-    .replace(/[^\w\-]+/g, '')
-    .replace(/\-\-+/g, '-')
+    .replace(/[^\w\\-]+/g, '')
+    .replace(/\\-\\-+/g, '-')
     .replace(/^-+/, '')
     .replace(/-+$/, '');
 };
@@ -184,7 +184,7 @@ export const isValidJSON = (str: string): boolean => {
   try {
     JSON.parse(str);
     return true;
-  } catch (e) {
+  } catch  {
     return false;
   }
 };
