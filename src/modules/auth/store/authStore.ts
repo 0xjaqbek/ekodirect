@@ -5,6 +5,16 @@ import apiClient from '../../../shared/api';
 import type { User, LoginRequest, RegisterRequest } from '../../../shared/types';
 import { API_ROUTES, STORAGE_KEYS } from '../../../shared/constants';
 
+// Fix the duplicate API path issue
+const fixApiPath = (path: string) => {
+  // If the path starts with /api and we already have a base URL with /api, 
+  // remove the duplicate
+  if (path.startsWith('/api') && import.meta.env.VITE_API_URL?.includes('/api')) {
+    return path.replace('/api', '');
+  }
+  return path;
+};
+
 // Interface for AuthState
 export interface AuthState {
   user: User | null;
@@ -37,7 +47,7 @@ export const useAuthStore = create<AuthState>()(
         
         try {
           const response = await apiClient.post<{ user: User; token: string; refreshToken: string }>(
-            API_ROUTES.AUTH.LOGIN,
+            fixApiPath(API_ROUTES.AUTH.LOGIN),
             credentials
           );
           
@@ -76,7 +86,7 @@ export const useAuthStore = create<AuthState>()(
         
         try {
           const response = await apiClient.post<{ user: User }>(
-            API_ROUTES.AUTH.REGISTER,
+            fixApiPath(API_ROUTES.AUTH.REGISTER),
             userData
           );
           
@@ -125,7 +135,7 @@ export const useAuthStore = create<AuthState>()(
         
         try {
           const response = await apiClient.post<{ token: string; refreshToken: string }>(
-            API_ROUTES.AUTH.REFRESH_TOKEN,
+            fixApiPath(API_ROUTES.AUTH.REFRESH_TOKEN),
             { refreshToken }
           );
           
@@ -139,7 +149,7 @@ export const useAuthStore = create<AuthState>()(
             get().logout();
             return false;
           }
-        } catch  {
+        } catch {
           get().logout();
           return false;
         }

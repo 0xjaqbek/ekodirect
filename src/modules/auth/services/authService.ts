@@ -7,6 +7,8 @@ import type {
     ApiResponse,
     User,
   } from '../../../shared/types';
+// Verify the API_ROUTES values
+console.log("Auth routes:", API_ROUTES.AUTH);
 
 /**
  * Service for handling authentication-related API calls
@@ -26,6 +28,8 @@ class AuthService {
    * Register a new user
    */
   async register(userData: RegisterRequest): Promise<ApiResponse<{ user: User }>> {
+    console.log("Registering user:", userData);
+    console.log("API URL:", API_ROUTES.AUTH.REGISTER);
     return await apiClient.post<{ user: User }>(
       API_ROUTES.AUTH.REGISTER,
       userData

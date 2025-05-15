@@ -72,52 +72,54 @@ export const PRODUCT_CATEGORIES = [
     REJECTED: 'rejected' as const
   };
   
-  // Ścieżki API
-  export const API_ROUTES = {
-    AUTH: {
-      REGISTER: '/api/auth/register',
-      LOGIN: '/api/auth/login',
-      REFRESH_TOKEN: '/api/auth/refresh-token',
-      VERIFY_EMAIL: '/api/auth/verify-email'
-    },
-    USERS: {
-      ME: '/api/users/me',
-      BY_ID: (id: string) => `/api/users/${id}`
-    },
-    PRODUCTS: {
-      LIST: '/api/products',
-      BY_ID: (id: string) => `/api/products/${id}`,
-      TRACKING: (id: string) => `/api/products/${id}/tracking`,
-      STATUS: (id: string) => `/api/products/${id}/status`,
-      IMAGES: (id: string) => `/api/products/${id}/images`
-    },
-    ORDERS: {
-      LIST: '/api/orders',
-      BY_ID: (id: string) => `/api/orders/${id}`,
-      STATUS: (id: string) => `/api/orders/${id}/status`,
-      INVOICE: (id: string) => `/api/orders/${id}/invoice`
-    },
-    REVIEWS: {
-      PRODUCT: (id: string) => `/api/reviews/product/${id}`,
-      FARMER: (id: string) => `/api/reviews/farmer/${id}`,
-      BY_ID: (id: string) => `/api/reviews/${id}`
-    },
-    CERTIFICATES: {
-      LIST: '/api/certificates',
-      BY_ID: (id: string) => `/api/certificates/${id}`
-    },
-    GROUPS: {
-      LIST: '/api/groups',
-      NEARBY: '/api/groups/nearby',
-      BY_ID: (id: string) => `/api/groups/${id}`,
-      JOIN: (id: string) => `/api/groups/${id}/join`
-    },
-    PAYMENTS: {
-      CREATE_INTENT: '/api/payments/create-intent',
-      BY_ID: (id: string) => `/api/payments/${id}`,
-      WEBHOOK: '/api/payments/webhook'
-    }
-  };
+// src/shared/constants/apiRoutes.ts
+// API Routes separated for better organization
+
+export const API_ROUTES = {
+  AUTH: {
+    REGISTER: '/auth/register',
+    LOGIN: '/auth/login',
+    REFRESH_TOKEN: '/auth/refresh-token',
+    VERIFY_EMAIL: '/auth/verify-email'
+  },
+  USERS: {
+    ME: '/users/me',
+    BY_ID: (id: string) => `/users/${id}`
+  },
+  PRODUCTS: {
+    LIST: '/products',
+    BY_ID: (id: string) => `/products/${id}`,
+    TRACKING: (id: string) => `/products/${id}/tracking`,
+    STATUS: (id: string) => `/products/${id}/status`,
+    IMAGES: (id: string) => `/products/${id}/images`
+  },
+  ORDERS: {
+    LIST: '/orders',
+    BY_ID: (id: string) => `/orders/${id}`,
+    STATUS: (id: string) => `/orders/${id}/status`,
+    INVOICE: (id: string) => `/orders/${id}/invoice`
+  },
+  REVIEWS: {
+    PRODUCT: (id: string) => `/reviews/product/${id}`,
+    FARMER: (id: string) => `/reviews/farmer/${id}`,
+    BY_ID: (id: string) => `/reviews/${id}`
+  },
+  CERTIFICATES: {
+    LIST: '/certificates',
+    BY_ID: (id: string) => `/certificates/${id}`
+  },
+  GROUPS: {
+    LIST: '/groups',
+    NEARBY: '/groups/nearby',
+    BY_ID: (id: string) => `/groups/${id}`,
+    JOIN: (id: string) => `/groups/${id}/join`
+  },
+  PAYMENTS: {
+    CREATE_INTENT: '/payments/create-intent',
+    BY_ID: (id: string) => `/payments/${id}`,
+    WEBHOOK: '/payments/webhook'
+  }
+};
   
   // Klucze LocalStorage
   export const STORAGE_KEYS = {
