@@ -164,8 +164,13 @@ export const createSlug = (text: string): string => {
     .replace(/ź/g, 'z')
     .replace(/ż/g, 'z')
     .replace(/\s+/g, '-')
+<<<<<<< HEAD
     .replace(/[^\w\\-]+/g, '')
     .replace(/\\-\\-+/g, '-')
+=======
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-')
+>>>>>>> 3dbe02a (initial)
     .replace(/^-+/, '')
     .replace(/-+$/, '');
 };
