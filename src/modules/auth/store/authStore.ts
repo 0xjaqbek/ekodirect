@@ -155,45 +155,72 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       
-      // Check user session
-      checkSession: async () => {
-        const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+// Check user session - modified with better error handling and fallback
+checkSession: async () => {
+  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+  
+  if (!token) {
+    get().logout();
+    return false;
+  }
+  
+  set({ isLoading: true });
+  
+  try {
+    // Fetch user data
+    const response = await apiClient.get<User>(API_ROUTES.USERS.ME);
+    
+    if (response.success && response.data) {
+      set({
+        user: response.data,
+        isAuthenticated: true,
+        isLoading: false
+      });
+      return true;
+    } else {
+      // Try to refresh token if user data fetch fails
+      try {
+        const refreshed = await get().refreshToken();
         
-        if (!token) {
-          return false;
-        }
-        
-        set({ isLoading: true });
-        
-        try {
-          // Fetch user data
-          const response = await apiClient.get<User>(API_ROUTES.USERS.ME);
-          
-          if (response.success && response.data) {
-            set({
-              user: response.data,
-              isAuthenticated: true,
-              isLoading: false
-            });
-            return true;
-          } else {
-            // Try to refresh token if user data fetch fails
-            const refreshed = await get().refreshToken();
-            
-            if (refreshed) {
-              return await get().checkSession();
-            } else {
-              get().logout();
-              set({ isLoading: false });
-              return false;
-            }
-          }
-        } catch  {
+        if (refreshed) {
+          return await get().checkSession();
+        } else {
           get().logout();
           set({ isLoading: false });
           return false;
         }
-      },
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        get().logout();
+        set({ isLoading: false });
+        return false;
+      }
+    }
+  } catch (error) {
+    console.error('Session check error:', error);
+    // IMPORTANT: If both the session check and refresh fail, but we have a stored user,
+    // we can use that as a fallback for a smoother user experience
+    const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        set({
+          user,
+          isAuthenticated: true,
+          isLoading: false
+        });
+        console.log('Using stored user as fallback');
+        return true;
+      } catch (parseError) {
+        console.error('Failed to parse stored user:', parseError);
+      }
+    }
+    
+    get().logout();
+    set({ isLoading: false });
+    return false;
+  }
+},
       
       // Clear error
       clearError: () => set({ error: null })

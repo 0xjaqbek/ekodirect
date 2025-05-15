@@ -1,6 +1,6 @@
 // server/models/User.js
-const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 
 const GeoSchema = new mongoose.Schema({
   type: {
@@ -99,6 +99,4 @@ UserSchema.pre('save', function(next) {
 });
 
 // Create model from schema
-const User = mongoose.model('User', UserSchema);
-
-module.exports = User;
+export const User = mongoose.model('User', UserSchema);

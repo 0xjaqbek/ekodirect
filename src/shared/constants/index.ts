@@ -76,16 +76,19 @@ export const PRODUCT_CATEGORIES = [
 // API Routes separated for better organization
 
 export const API_ROUTES = {
-  AUTH: {
-    REGISTER: '/auth/register',
-    LOGIN: '/auth/login',
-    REFRESH_TOKEN: '/auth/refresh-token',
-    VERIFY_EMAIL: '/auth/verify-email'
-  },
-  USERS: {
-    ME: '/users/me',
-    BY_ID: (id: string) => `/users/${id}`
-  },
+    AUTH: {
+      REGISTER: '/api/auth/register',
+      LOGIN: '/api/auth/login',
+      REFRESH_TOKEN: '/api/auth/refresh-token',
+      VERIFY_EMAIL: '/api/auth/verify-email',
+      RESEND_VERIFICATION: '/api/auth/resend-verification',
+      REQUEST_PASSWORD_RESET: '/api/auth/request-password-reset',
+      RESET_PASSWORD: '/api/auth/reset-password'
+    },
+    USERS: {
+      ME: '/api/users/me',
+      BY_ID: (id: string) => `/api/users/${id}`
+    },
   PRODUCTS: {
     LIST: '/products',
     BY_ID: (id: string) => `/products/${id}`,

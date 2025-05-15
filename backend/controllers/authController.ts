@@ -206,7 +206,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     let decoded;
     try {
       decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { userId: string };
-    } catch (error) {
+    } catch  {
       return res.status(401).json({
         success: false,
         error: 'Nieprawidłowy lub wygasły token odświeżający'

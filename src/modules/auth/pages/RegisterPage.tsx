@@ -16,7 +16,10 @@ const RegisterPage: React.FC = () => {
   }, [isAuthenticated, navigate]);
   
   const handleRegisterSuccess = () => {
-    navigate('/verify-email-info', { replace: true });
+    navigate('/verify-email-info', { 
+      replace: true,
+      state: { email: formData.email } // Pass the email from your form
+    });
   };
   
   return (

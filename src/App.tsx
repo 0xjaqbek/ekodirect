@@ -2,7 +2,12 @@
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { LoginPage, RegisterPage, VerifyEmailPage, ProtectedRoute } from './modules/auth';
+import { 
+  LoginPage, 
+  RegisterPage, 
+  VerifyEmailInfoPage, 
+  ProtectedRoute 
+} from './modules/auth';
 import { UserMenu } from './modules/auth';
 import './App.css';
 
@@ -32,7 +37,8 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
-              <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/verify-email" element={<VerifyEmailInfoPage />} />
+              <Route path="/verify-email-info" element={<VerifyEmailInfoPage />} />
               
               {/* Protected routes */}
               <Route path="/profile" element={
