@@ -1,4 +1,4 @@
-// src/App.tsx
+// src/App.tsx (zmodyfikowany)
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,6 +9,12 @@ import {
   ProtectedRoute 
 } from './modules/auth';
 import { UserMenu } from './modules/auth';
+// Importy z modułu użytkowników
+import {
+  ProfilePage,
+  EditProfilePage,
+  FarmerProfilePage
+} from './modules/users';
 import './App.css';
 
 // Create Query client for React Query
@@ -40,12 +46,19 @@ function App() {
               <Route path="/verify-email" element={<VerifyEmailInfoPage />} />
               <Route path="/verify-email-info" element={<VerifyEmailInfoPage />} />
               
-              {/* Protected routes */}
+              {/* Trasy związane z użytkownikami - dostępne tylko dla zalogowanych */}
               <Route path="/profile" element={
                 <ProtectedRoute>
                   <ProfilePage />
                 </ProtectedRoute>
               } />
+              <Route path="/profile/edit" element={
+                <ProtectedRoute>
+                  <EditProfilePage />
+                </ProtectedRoute>
+              } />
+              {/* Publiczny profil rolnika - dostępny dla wszystkich */}
+              <Route path="/farmers/:id" element={<FarmerProfilePage />} />
               
               {/* Fallback route */}
               <Route path="*" element={<NotFoundPage />} />
@@ -62,13 +75,6 @@ const HomePage = () => (
   <div>
     <h1 className="text-2xl font-bold mb-4">Witaj w EkoDirekt!</h1>
     <p>Platforma łącząca ekologicznych rolników z konsumentami</p>
-  </div>
-);
-
-const ProfilePage = () => (
-  <div>
-    <h1 className="text-2xl font-bold mb-4">Twój profil</h1>
-    <p>Tu będą wyświetlane informacje o Twoim profilu</p>
   </div>
 );
 

@@ -1,14 +1,20 @@
-// server/server.js
+// server/server.js (zmodyfikowany)
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Load environment variables
+// Inicjalizacja zmiennych środowiskowych
 dotenv.config();
 
-// Initialize express app
+// Pobierz ścieżkę bieżącego pliku
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Inicjalizacja aplikacji Express
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -16,22 +22,25 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Statyczne pliki (dla avatarów)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Podstawowe trasy API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
-// Simple test endpoint
+// Prosty endpoint testowy
 app.post('/api/test', (req, res) => {
   console.log('Test endpoint hit with data:', req.body);
   res.json({ success: true, message: 'Test endpoint working' });
 });
 
-// Root route for API testing
+// Główna trasa dla testowania API
 app.get('/', (req, res) => {
   res.json({ message: 'EkoDirect API is running with Firebase' });
 });
 
-// Error handling middleware
+// Middleware obsługi błędów
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({
@@ -40,29 +49,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// Uruchomienie serwera
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API available at http://localhost:${PORT}/api`);
-});
-
-app.get('/api/test-firebase', async (req, res) => {
-  try {
-    const testDoc = await db.collection('test').add({
-      message: 'Test document',
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    res.json({
-      success: true,
-      message: 'Firebase test successful',
-      docId: testDoc.id
-    });
-  } catch (error) {
-    console.error('Firebase test error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Firebase test failed: ' + error.message
-    });
-  }
 });
