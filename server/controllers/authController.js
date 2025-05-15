@@ -724,59 +724,51 @@ export const resetPassword = async (req, res) => {
  * Resend verification email
  */
 export const resendVerificationEmail = async (req, res) => {
-  try {
-    console.log("Resend verification email request received:", JSON.stringify(req.body, null, 2));
-    
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email is required'
-      });
-    }
-
-    console.log("Finding user by email...");
-    // Find user by email
-    const userSnapshot = await usersCollection.where('email', '==', email).get();
-    
-    if (userSnapshot.empty) {
-      return res.status(404).json({
-        success: false,
-        error: 'Użytkownik o podanym adresie email nie istnieje'
-      });
-    }
-
-    const userDoc = userSnapshot.docs[0];
-    const userData = userDoc.data();
-
-    // Check if user is already verified
-    if (userData.isVerified) {
-      return res.status(400).json({
-        success: false,
-        error: 'Konto zostało już zweryfikowane'
-      });
-    }
-
-    console.log("Generating new verification token...");
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    
-    console.log("Saving verification token...");
-    // Save token to Firestore
-    await tokensCollection.add({
-      user: userDoc.id,
-      token: verificationToken,
-      type: 'email-verification',
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-    });
-
-    // Prepare verification URL
-    const verificationUrl = `${config.frontendUrl || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
-    
-    console.log("Sending verification email...");
     try {
+      const { email } = req.body;
+  
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email is required'
+        });
+      }
+  
+      // Find user by email
+      const userSnapshot = await usersCollection.where('email', '==', email).get();
+      
+      if (userSnapshot.empty) {
+        return res.status(404).json({
+          success: false,
+          error: 'User with this email does not exist'
+        });
+      }
+  
+      const userDoc = userSnapshot.docs[0];
+      const userData = userDoc.data();
+  
+      // Check if user is already verified
+      if (userData.isVerified) {
+        return res.status(400).json({
+          success: false,
+          error: 'Account is already verified'
+        });
+      }
+  
+      // Generate verification token
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      
+      // Save token to database
+      await tokensCollection.add({
+        user: userDoc.id,
+        token: verificationToken,
+        type: 'email-verification',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      });
+  
       // Send verification email
+      const verificationUrl = `${config.frontendUrl}/verify-email?token=${verificationToken}`;
+      
       await sendEmail({
         to: userData.email,
         subject: 'Verify your email - EkoDirect',
@@ -789,28 +781,18 @@ export const resendVerificationEmail = async (req, res) => {
           </div>
         `
       });
-      console.log("Verification email sent successfully");
-    } catch (emailError) {
-      console.error("Email sending failed:", emailError);
-      return res.status(500).json({
+  
+      // Return success
+      res.json({
+        success: true,
+        message: 'Verification link has been sent to your email'
+      });
+    } catch (error) {
+      console.error('Resend verification email error:', error);
+      res.status(500).json({
         success: false,
-        error: 'Wystąpił błąd podczas wysyłania email. Spróbuj ponownie później.'
+        error: 'There was an error processing your request. Please try again later.'
       });
     }
-
-    console.log("Resend verification email completed successfully");
-    // Return success response
-    res.json({
-      success: true,
-      message: 'Link weryfikacyjny został wysłany ponownie. Sprawdź swoją skrzynkę email.'
-    });
-  } catch (error) {
-    console.error('Resend verification email error details:', error);
-    console.error('Stack trace:', error.stack);
-    res.status(500).json({
-      success: false,
-      error: 'Error resending verification email: ' + error.message
-    });
-  }
-};
+  };
 

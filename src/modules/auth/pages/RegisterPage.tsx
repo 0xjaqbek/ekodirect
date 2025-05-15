@@ -3,6 +3,8 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RegisterForm from '../components/RegisterForm';
 import { useAuth } from '../hooks/useAuth';
+import type { RegisterFormInputs } from '../utils/authValidation';
+import { useForm } from 'react-hook-form';
 
 const RegisterPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -15,10 +17,15 @@ const RegisterPage: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
   
+  const { watch } = useForm<RegisterFormInputs>({
+    defaultValues: { email: '' } // Provide a default value for email
+  });
+  const email = watch('email');
+  
   const handleRegisterSuccess = () => {
     navigate('/verify-email-info', { 
       replace: true,
-      state: { email: formData.email } // Pass the email from your form
+      state: { email: email }
     });
   };
   

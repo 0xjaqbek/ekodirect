@@ -1,4 +1,5 @@
-// src/modules/auth/services/authService.ts
+// Fix for src/modules/auth/services/authService.ts
+
 import apiClient from '../../../shared/api';
 import { API_ROUTES } from '../../../shared/constants';
 import type {
@@ -7,8 +8,6 @@ import type {
     ApiResponse,
     User,
   } from '../../../shared/types';
-// Verify the API_ROUTES values
-console.log("Auth routes:", API_ROUTES.AUTH);
 
 /**
  * Service for handling authentication-related API calls
@@ -57,11 +56,21 @@ class AuthService {
   }
 
   /**
+   * Resend verification email
+   */
+  async resendVerificationEmail(email: string): Promise<ApiResponse<{ sent: boolean }>> {
+    return await apiClient.post<{ sent: boolean }>(
+      API_ROUTES.AUTH.RESEND_VERIFICATION,
+      { email }
+    );
+  }
+
+  /**
    * Request password reset
    */
   async requestPasswordReset(email: string): Promise<ApiResponse<{ sent: boolean }>> {
     return await apiClient.post<{ sent: boolean }>(
-      '/api/auth/request-password-reset',
+      API_ROUTES.AUTH.REQUEST_PASSWORD_RESET,
       { email }
     );
   }
@@ -71,7 +80,7 @@ class AuthService {
    */
   async resetPassword(token: string, newPassword: string): Promise<ApiResponse<{ success: boolean }>> {
     return await apiClient.post<{ success: boolean }>(
-      '/api/auth/reset-password',
+      API_ROUTES.AUTH.RESET_PASSWORD,
       { token, newPassword }
     );
   }
