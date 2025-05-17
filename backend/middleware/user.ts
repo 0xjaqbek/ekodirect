@@ -1,6 +1,6 @@
 // backend/middleware/user.ts
 import { Request, Response, NextFunction } from 'express';
-import { admin } from '../../server/firebase.js';
+import { admin } from '../firebase';
 
 const db = admin.firestore();
 const usersCollection = db.collection('users');
