@@ -22,6 +22,7 @@ export interface User {
   }
   
   export interface Product {
+    distance: boolean;
     _id: string;
     name: string;
     description: string;
