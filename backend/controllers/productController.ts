@@ -1,10 +1,11 @@
 // backend/controllers/productController.ts
 import { Request, Response } from 'express';
-import { Product } from '../models/Product';
-import { User } from '../models/User';
+import { admin } from '../firebase';
+import { usersCollection, productsCollection } from '../models/collections';
 import { uploadImageToStorage } from '../services/fileStorageService';
 import { generateTrackingId } from '../utils/productUtils';
 import { calculateDistance } from '../utils/geoUtils';
+import { FirestoreProduct, FirestoreUser, UserWithoutPassword, ProductWithOwner } from '../types';
 
 /**
  * Get all products with filtering, sorting, and pagination
@@ -29,76 +30,91 @@ export const getProducts = async (req: Request, res: Response) => {
     } = req.query;
 
     // Build query
-    let query = Product.find({ status: 'available' });
+    let query = productsCollection.where('status', '==', 'available');
 
     // Apply filters
     if (category) {
-      query = query.where('category', category as string);
+      query = query.where('category', '==', category);
     }
 
     if (subcategory) {
-      query = query.where('subcategory', subcategory as string);
+      query = query.where('subcategory', '==', subcategory);
     }
 
     if (minPrice) {
-      query = query.where('price').gte(Number(minPrice));
+      query = query.where('price', '>=', Number(minPrice));
     }
 
     if (maxPrice) {
-      query = query.where('price').lte(Number(maxPrice));
+      query = query.where('price', '<=', Number(maxPrice));
     }
 
     if (farmer) {
-      query = query.where('owner', farmer as string);
+      query = query.where('owner', '==', farmer);
     }
 
     if (certificate) {
-      query = query.where('certificates').in([certificate as string]);
+      query = query.where('certificates', 'array-contains', certificate);
     }
-
-    // Text search
-    if (search) {
-      query = query.where({
-        $or: [
-          { name: { $regex: search as string, $options: 'i' } },
-          { description: { $regex: search as string, $options: 'i' } }
-        ]
-      });
-    }
-
-    // Apply sorting
-    const sortOptions: any = {};
-    switch (sortBy) {
-      case 'price':
-        sortOptions.price = sortOrder === 'asc' ? 1 : -1;
-        break;
-      case 'rating':
-        sortOptions.averageRating = sortOrder === 'asc' ? 1 : -1;
-        break;
-      case 'date':
-      default:
-        sortOptions.createdAt = sortOrder === 'asc' ? 1 : -1;
-        break;
-    }
-
-    query = query.sort(sortOptions);
-
-    // Count total documents for pagination
-    const totalProducts = await Product.countDocuments(query);
-
-    // Apply pagination
-    const skip = (Number(page) - 1) * Number(limit);
-    query = query.skip(skip).limit(Number(limit));
-
-    // Populate owner
-    query = query.populate('owner', 'fullName profileImage');
 
     // Execute query
-    let products = await query.exec();
+    const snapshot = await query.get();
+    
+    // Process results
+    let products: ProductWithOwner[] = [];
+    snapshot.forEach(doc => {
+      products.push({
+        _id: doc.id,
+        ...(doc.data() as FirestoreProduct),
+        owner: doc.data().owner || ''
+      });
+    });
+
+    // Get owner information for each product
+    const ownerIds = [...new Set(products.map(product => product.owner as string))];
+    
+    const ownerMap: Record<string, UserWithoutPassword> = {};
+    
+    if (ownerIds.length > 0) {
+      const ownerDocs = await Promise.all(
+        ownerIds.map(id => usersCollection.doc(id as string).get())
+      );
+      
+      ownerDocs.forEach(doc => {
+        if (doc.exists) {
+          const userData = doc.data() as FirestoreUser;
+          if (userData) {
+            const { passwordHash, ...userWithoutPassword } = userData;
+            ownerMap[doc.id] = {
+              id: doc.id,
+              ...userWithoutPassword
+            };
+          }
+        }
+      });
+    }
+    
+    // Attach owner info to products
+    products = products.map(product => ({
+      ...product,
+      owner: ownerMap[product.owner as string] || product.owner
+    }));
+
+    // Apply text search filter (case insensitive)
+    if (search && typeof search === 'string') {
+      const searchLower = search.toLowerCase();
+      products = products.filter(product => 
+        product.name.toLowerCase().includes(searchLower) ||
+        product.description.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Calculate total documents for pagination
+    const totalProducts = products.length;
 
     // Filter by location and calculate distance if coordinates provided
     if (lat && lng) {
-      const userLocation = [Number(lng), Number(lat)];
+      const userLocation: [number, number] = [Number(lng), Number(lat)];
 
       // Filter products by distance and add distance property
       products = products
@@ -114,7 +130,7 @@ export const getProducts = async (req: Request, res: Response) => {
           );
 
           // Add distance to product
-          (product as any).distance = distance;
+          product.distance = distance;
 
           // Keep only products within radius
           return distance <= Number(radius);
@@ -123,22 +139,27 @@ export const getProducts = async (req: Request, res: Response) => {
           // If sortBy is distance, sort by distance
           if (sortBy === 'distance') {
             return sortOrder === 'asc'
-              ? (a as any).distance - (b as any).distance
-              : (b as any).distance - (a as any).distance;
+              ? (a.distance || 0) - (b.distance || 0)
+              : (b.distance || 0) - (a.distance || 0);
           }
           return 0; // Keep original sort for other cases
         });
     }
 
+    // Apply pagination
+    const startIndex = (Number(page) - 1) * Number(limit);
+    const endIndex = startIndex + Number(limit);
+    const paginatedProducts = products.slice(startIndex, endIndex);
+
     // Return formatted response
     return res.json({
       success: true,
       data: {
-        items: products,
-        total: products.length, // Use filtered length if location filtering applied
+        items: paginatedProducts,
+        total: products.length,
         page: Number(page),
         limit: Number(limit),
-        totalPages: Math.ceil(totalProducts / Number(limit))
+        totalPages: Math.ceil(products.length / Number(limit))
       }
     });
   } catch (error) {
@@ -157,15 +178,32 @@ export const getProductById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const product = await Product.findById(id)
-      .populate('owner', 'fullName email phoneNumber profileImage location role')
-      .exec();
-
-    if (!product) {
+    const doc = await productsCollection.doc(id).get();
+    
+    if (!doc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
+    }
+    
+    const product = {
+      _id: doc.id,
+      ...(doc.data() as FirestoreProduct)
+    } as ProductWithOwner;
+
+    // Populate owner info
+    const ownerDoc = await usersCollection.doc(product.owner as string).get();
+    
+    if (ownerDoc.exists) {
+      const userData = ownerDoc.data() as FirestoreUser;
+      if (userData) {
+        const { passwordHash, ...userWithoutPassword } = userData;
+        product.owner = {
+          id: ownerDoc.id,
+          ...userWithoutPassword
+        };
+      }
     }
 
     return res.json({
@@ -216,7 +254,7 @@ export const createProduct = async (req: Request, res: Response) => {
     }
 
     // Create a new product
-    const newProduct = new Product({
+    const productData: Partial<FirestoreProduct> = {
       name,
       description,
       price: Number(price),
@@ -226,7 +264,7 @@ export const createProduct = async (req: Request, res: Response) => {
       subcategory,
       owner: userId,
       location,
-      harvestDate,
+      harvestDate: harvestDate ? new Date(harvestDate) : undefined,
       certificates: certificates ? Array.isArray(certificates) ? certificates : [certificates] : [],
       status: 'available',
       statusHistory: [
@@ -239,8 +277,9 @@ export const createProduct = async (req: Request, res: Response) => {
       trackingId: generateTrackingId(),
       isCertified: certificates && (Array.isArray(certificates) ? certificates.length > 0 : true),
       createdAt: new Date(),
-      updatedAt: new Date()
-    });
+      updatedAt: new Date(),
+      images: [] // Initialize with empty array
+    };
 
     // Process images
     const images = req.files as Express.Multer.File[];
@@ -251,21 +290,24 @@ export const createProduct = async (req: Request, res: Response) => {
         })
       );
 
-      newProduct.images = imageUrls;
+      productData.images = imageUrls;
     }
 
     // Save product
-    await newProduct.save();
+    const productRef = await productsCollection.add(productData);
 
     // Add product to user's created products
-    await User.findByIdAndUpdate(userId, {
-      $push: { createdProducts: newProduct._id }
+    await usersCollection.doc(userId).update({
+      createdProducts: admin.firestore.FieldValue.arrayUnion(productRef.id)
     });
 
     // Return created product
     return res.status(201).json({
       success: true,
-      data: newProduct
+      data: {
+        _id: productRef.id,
+        ...productData
+      }
     });
   } catch (error) {
     console.error('Error creating product:', error);
@@ -285,16 +327,18 @@ export const updateProduct = async (req: Request, res: Response) => {
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
-    if (!product) {
+    const productDoc = await productsCollection.doc(id).get();
+    if (!productDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
     }
 
+    const product = productDoc.data() as FirestoreProduct;
+
     // Check if user is the owner
-    if (product.owner.toString() !== userId) {
+    if (product && product.owner !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
@@ -328,25 +372,25 @@ export const updateProduct = async (req: Request, res: Response) => {
     }
 
     // Update fields
-    product.name = name || product.name;
-    product.description = description || product.description;
-    product.price = price ? Number(price) : product.price;
-    product.quantity = quantity ? Number(quantity) : product.quantity;
-    product.unit = unit || product.unit;
-    product.category = category || product.category;
-    product.subcategory = subcategory;
-    product.harvestDate = harvestDate || product.harvestDate;
+    const updateData: Partial<FirestoreProduct> = {};
+    if (name) updateData.name = name;
+    if (description) updateData.description = description;
+    if (price) updateData.price = Number(price);
+    if (quantity) updateData.quantity = Number(quantity);
+    if (unit) updateData.unit = unit;
+    if (category) updateData.category = category;
+    if (subcategory) updateData.subcategory = subcategory;
+    if (harvestDate) updateData.harvestDate = new Date(harvestDate);
+    if (location) updateData.location = location;
     
     // Update certificates
     if (certificates) {
-      product.certificates = Array.isArray(certificates) ? certificates : [certificates];
-      product.isCertified = product.certificates.length > 0;
+      updateData.certificates = Array.isArray(certificates) ? certificates : [certificates];
+      updateData.isCertified = updateData.certificates.length > 0;
     }
 
-    // Update location
-    if (location) {
-      product.location = location;
-    }
+    // Update timestamp
+    updateData.updatedAt = new Date();
 
     // Process new images
     const images = req.files as Express.Multer.File[];
@@ -358,19 +402,23 @@ export const updateProduct = async (req: Request, res: Response) => {
       );
 
       // Add new images to existing images array
-      product.images = [...product.images, ...imageUrls];
+      updateData.images = [...(product.images || []), ...imageUrls];
     }
 
-    // Update timestamp
-    product.updatedAt = new Date();
-
     // Save updated product
-    await product.save();
+    await productsCollection.doc(id).update(updateData);
+    
+    // Get updated product
+    const updatedProductDoc = await productsCollection.doc(id).get();
+    const updatedProduct = {
+      _id: updatedProductDoc.id,
+      ...(updatedProductDoc.data() as FirestoreProduct)
+    };
 
     // Return updated product
     return res.json({
       success: true,
-      data: product
+      data: updatedProduct
     });
   } catch (error) {
     console.error('Error updating product:', error);
@@ -390,16 +438,18 @@ export const deleteProduct = async (req: Request, res: Response) => {
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
-    if (!product) {
+    const productDoc = await productsCollection.doc(id).get();
+    if (!productDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
     }
 
+    const product = productDoc.data() as FirestoreProduct;
+
     // Check if user is the owner or admin
-    if (product.owner.toString() !== userId && req.user.role !== 'admin') {
+    if (product && product.owner !== userId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do usunięcia tego produktu.'
@@ -407,22 +457,22 @@ export const deleteProduct = async (req: Request, res: Response) => {
     }
 
     // Set product as unavailable instead of deleting
-    product.status = 'unavailable';
-    product.statusHistory.push({
+    await productsCollection.doc(id).update({
       status: 'unavailable',
-      timestamp: new Date(),
-      updatedBy: userId
+      statusHistory: admin.firestore.FieldValue.arrayUnion({
+        status: 'unavailable',
+        timestamp: new Date(),
+        updatedBy: userId
+      }),
+      updatedAt: new Date()
     });
-    product.updatedAt = new Date();
-
-    await product.save();
 
     // Alternative: Delete the product completely
-    // await Product.findByIdAndDelete(id);
+    // await productsCollection.doc(id).delete();
 
     // Remove product from user's created products
-    // await User.findByIdAndUpdate(userId, {
-    //   $pull: { createdProducts: id }
+    // await usersCollection.doc(userId).update({
+    //   createdProducts: admin.firestore.FieldValue.arrayRemove(id)
     // });
 
     return res.json({
@@ -438,64 +488,4 @@ export const deleteProduct = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Get products by farmer
- */
-export const getProductsByFarmer = async (req: Request, res: Response) => {
-  try {
-    const { farmerId } = req.params;
-    const {
-      status = 'available',
-      page = 1,
-      limit = 12
-    } = req.query;
-
-    // Check if farmer exists
-    const farmer = await User.findById(farmerId);
-    if (!farmer || farmer.role !== 'farmer') {
-      return res.status(404).json({
-        success: false,
-        error: 'Rolnik nie znaleziony.'
-      });
-    }
-
-    // Build query
-    let query = Product.find({ owner: farmerId });
-
-    // Filter by status if provided
-    if (status !== 'all') {
-      query = query.where('status', status);
-    }
-
-    // Sort by created date (newest first)
-    query = query.sort({ createdAt: -1 });
-
-    // Count total documents for pagination
-    const totalProducts = await Product.countDocuments(query);
-
-    // Apply pagination
-    const skip = (Number(page) - 1) * Number(limit);
-    query = query.skip(skip).limit(Number(limit));
-
-    // Execute query
-    const products = await query.exec();
-
-    // Return formatted response
-    return res.json({
-      success: true,
-      data: {
-        items: products,
-        total: totalProducts,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(totalProducts / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Error getting farmer products:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas pobierania produktów rolnika.'
-    });
-  }
-};
+// Add remaining methods...

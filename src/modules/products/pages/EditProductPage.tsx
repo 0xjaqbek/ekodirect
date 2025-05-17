@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../modules/auth';
 import { useProducts } from '../hooks/useProducts';
 import ProductForm from '../components/ProductForm';
+import { isPopulatedOwner } from '../types'; // Import isPopulatedOwner
 
 const EditProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,25 +21,16 @@ const EditProductPage: React.FC = () => {
   }, [id, fetchProduct, clearError]);
   
   // Check if user is product owner
-  const isOwner = user && selectedProduct && 
-    (user._id === selectedProduct.owner || 
-     (typeof selectedProduct.owner === 'object' && user._id === selectedProduct.owner._id));
+  const isOwner = user && selectedProduct && (
+    (typeof selectedProduct.owner === 'string' && user._id === selectedProduct.owner) || 
+    (isPopulatedOwner(selectedProduct.owner) && user._id === selectedProduct.owner._id)
+  );
   
   // Only product owner should be able to edit
   if (selectedProduct && !isOwner) {
     navigate(`/products/${id}`);
     return null;
   }
-  
-  // Handle successful product update
-  const handleSuccess = (productId: string) => {
-    navigate(`/products/${productId}`);
-  };
-  
-  // Handle form cancel
-  const handleCancel = () => {
-    navigate(`/products/${id}`);
-  };
   
   return (
     <div className="container mx-auto px-4 py-8">
@@ -77,6 +69,16 @@ const EditProductPage: React.FC = () => {
       )}
     </div>
   );
+  
+  // Handle successful product update
+  function handleSuccess(productId: string) {
+    navigate(`/products/${productId}`);
+  }
+  
+  // Handle form cancel
+  function handleCancel() {
+    navigate(`/products/${id}`);
+  }
 };
 
 export default EditProductPage;

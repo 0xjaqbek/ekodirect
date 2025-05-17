@@ -1,20 +1,19 @@
-// src/modules/products/pages/SearchResultsPage.tsx
+// src/modules/products/pages/SearchResultsPage.tsx - Fixed version
 import React, { useEffect } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useProducts } from '../hooks/useProducts';
 import ProductsList from '../components/ProductsList';
-import { queryStringToFilters, filtersToQueryString } from '../utils/filterUtils';
+import { queryStringToFilters } from '../utils/filterUtils';
 
 const SearchResultsPage: React.FC = () => {
   const location = useLocation();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { filters, updateFilters, resetFilters, totalProducts } = useProducts();
+  const [searchParams] = useSearchParams();
+  const { updateFilters, totalProducts } = useProducts();
   
-  // Get search query and other filters from URL
+  // Get search query from URL
   const searchQuery = searchParams.get('q') || '';
   
-  // Parse filters from URL query parameters
+  // Parse filters from URL query parameters and update store
   useEffect(() => {
     const parsedFilters = queryStringToFilters(location.search);
     
@@ -25,27 +24,6 @@ const SearchResultsPage: React.FC = () => {
     
     updateFilters(parsedFilters);
   }, [location.search, searchQuery, updateFilters]);
-  
-  // Update URL when filters change
-  const handleFiltersChange = (newFilters: any) => {
-    // Preserve search query
-    if (searchQuery && !newFilters.search) {
-      newFilters.search = searchQuery;
-    }
-    
-    // Convert filters to query string and navigate
-    const queryString = filtersToQueryString(newFilters);
-    setSearchParams(queryString);
-  };
-  
-  // Handle reset filters
-  const handleResetFilters = () => {
-    resetFilters();
-    
-    // Keep only search query
-    const queryString = searchQuery ? `q=${encodeURIComponent(searchQuery)}` : '';
-    setSearchParams(queryString);
-  };
   
   return (
     <div className="container mx-auto px-4 py-8">

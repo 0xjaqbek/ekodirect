@@ -1,7 +1,7 @@
 // backend/middleware/auth.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/User';
+import { usersCollection } from '../models/collections';
 import { config } from '../config';
 
 const JWT_SECRET = config.jwtSecret;
@@ -15,9 +15,7 @@ declare global {
   }
 }
 
-/**
- * Middleware to authenticate user with JWT token
- */
+// Authenticate user with JWT token
 export const authenticateUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Get token from Authorization header
@@ -36,9 +34,9 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     
     // Find user by ID
-    const user = await User.findById(decoded.userId).select('-passwordHash');
+    const userDoc = await usersCollection.doc(decoded.userId).get();
     
-    if (!user) {
+    if (!userDoc.exists) {
       return res.status(401).json({
         success: false,
         error: 'Użytkownik nie istnieje'
@@ -46,7 +44,13 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
     }
     
     // Attach user to request
-    req.user = user;
+    const userData = userDoc.data();
+    const { passwordHash, ...userWithoutPassword } = userData;
+    
+    req.user = {
+      id: userDoc.id,
+      ...userWithoutPassword
+    };
     
     next();
   } catch (error) {
@@ -65,27 +69,4 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
       error: 'Nieprawidłowy token'
     });
   }
-};
-
-/**
- * Middleware to check if user has required role
- */
-export const checkRole = (roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Brak autoryzacji. Wymagane zalogowanie.'
-      });
-    }
-    
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Brak uprawnień do wykonania tej operacji'
-      });
-    }
-    
-    next();
-  };
 };

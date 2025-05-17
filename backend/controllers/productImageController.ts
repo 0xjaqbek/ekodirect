@@ -1,8 +1,14 @@
 // backend/controllers/productImageController.ts
 import { Request, Response } from 'express';
-import { Product } from '../models/Product';
-import { uploadImageToStorage, deleteImageFromStorage } from '../services/fileStorageService';
-import { VALIDATION } from '../constants';
+import { admin } from '../firebase';
+import { VALIDATION } from '../../src/shared/constants';
+
+// Initialize Firestore
+const db = admin.firestore();
+const productsCollection = db.collection('products');
+
+// Initialize Firebase Storage
+const bucket = admin.storage().bucket();
 
 /**
  * Upload product images
@@ -13,16 +19,19 @@ export const uploadProductImages = async (req: Request, res: Response) => {
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
-    if (!product) {
+    const productDoc = await productsCollection.doc(id).get();
+    
+    if (!productDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
     }
 
+    const product = productDoc.data();
+
     // Check if user is the owner
-    if (product.owner.toString() !== userId) {
+    if (product.owner !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
@@ -31,6 +40,7 @@ export const uploadProductImages = async (req: Request, res: Response) => {
 
     // Get uploaded files
     const images = req.files as Express.Multer.File[];
+    
     if (!images || images.length === 0) {
       return res.status(400).json({
         success: false,
@@ -46,25 +56,58 @@ export const uploadProductImages = async (req: Request, res: Response) => {
       });
     }
 
-    // Upload images to storage
-    const imageUrls = await Promise.all(
-      images.map(async (file) => {
-        return await uploadImageToStorage(file, 'products');
-      })
-    );
+    // Upload images to Firebase Storage
+    const imageUrls = [];
+
+    for (const file of images) {
+      const fileName = `products/${userId}_${Date.now()}_${file.originalname}`;
+      const fileUpload = bucket.file(fileName);
+      
+      // Create write stream
+      const blobStream = fileUpload.createWriteStream({
+        metadata: {
+          contentType: file.mimetype
+        }
+      });
+      
+      // Handle stream errors
+      const uploadPromise = new Promise<string>((resolve, reject) => {
+        blobStream.on('error', (error) => {
+          console.error('Error uploading to Firebase Storage:', error);
+          reject(error);
+        });
+        
+        blobStream.on('finish', async () => {
+          // Make the file publicly accessible
+          await fileUpload.makePublic();
+          
+          // Get public URL
+          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+          resolve(publicUrl);
+        });
+        
+        // End the stream with the file buffer
+        blobStream.end(file.buffer);
+      });
+      
+      const imageUrl = await uploadPromise;
+      imageUrls.push(imageUrl);
+    }
 
     // Add new images to existing images array
-    product.images = [...product.images, ...imageUrls];
-    product.updatedAt = new Date();
-
-    // Save updated product
-    await product.save();
+    const updatedImages = [...product.images, ...imageUrls];
+    
+    // Update product in Firestore
+    await productDoc.ref.update({
+      images: updatedImages,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
     // Return updated image URLs
     return res.json({
       success: true,
       data: {
-        imageUrls: product.images
+        imageUrls: updatedImages
       }
     });
   } catch (error) {
@@ -85,16 +128,19 @@ export const removeProductImage = async (req: Request, res: Response) => {
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
-    if (!product) {
+    const productDoc = await productsCollection.doc(id).get();
+    
+    if (!productDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
     }
 
+    const product = productDoc.data();
+
     // Check if user is the owner
-    if (product.owner.toString() !== userId) {
+    if (product.owner !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
@@ -103,6 +149,7 @@ export const removeProductImage = async (req: Request, res: Response) => {
 
     // Check if image index is valid
     const index = parseInt(imageIndex, 10);
+    
     if (isNaN(index) || index < 0 || index >= product.images.length) {
       return res.status(400).json({
         success: false,
@@ -113,21 +160,36 @@ export const removeProductImage = async (req: Request, res: Response) => {
     // Get image URL
     const imageUrl = product.images[index];
 
-    // Delete image from storage
-    await deleteImageFromStorage(imageUrl);
+    // Try to delete image from Firebase Storage
+    try {
+      // Extract file path from URL
+      const decodedUrl = decodeURIComponent(imageUrl);
+      const startIndex = decodedUrl.indexOf('/o/') + 3;
+      const endIndex = decodedUrl.indexOf('?');
+      const filePath = decodedUrl.substring(startIndex, endIndex !== -1 ? endIndex : undefined);
+      
+      // Delete file from Storage
+      await bucket.file(filePath).delete();
+    } catch (deleteError) {
+      // Just log the error but continue with removal from array
+      console.warn('Error deleting image from Storage:', deleteError);
+    }
 
     // Remove image from array
-    product.images.splice(index, 1);
-    product.updatedAt = new Date();
+    const updatedImages = [...product.images];
+    updatedImages.splice(index, 1);
 
-    // Save updated product
-    await product.save();
+    // Update product in Firestore
+    await productDoc.ref.update({
+      images: updatedImages,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
     // Return updated image URLs
     return res.json({
       success: true,
       data: {
-        imageUrls: product.images
+        imageUrls: updatedImages
       }
     });
   } catch (error) {
@@ -148,16 +210,19 @@ export const setMainProductImage = async (req: Request, res: Response) => {
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
-    if (!product) {
+    const productDoc = await productsCollection.doc(id).get();
+    
+    if (!productDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
     }
 
+    const product = productDoc.data();
+
     // Check if user is the owner
-    if (product.owner.toString() !== userId) {
+    if (product.owner !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
@@ -166,6 +231,7 @@ export const setMainProductImage = async (req: Request, res: Response) => {
 
     // Check if image index is valid
     const index = parseInt(imageIndex, 10);
+    
     if (isNaN(index) || index < 0 || index >= product.images.length) {
       return res.status(400).json({
         success: false,
@@ -175,18 +241,21 @@ export const setMainProductImage = async (req: Request, res: Response) => {
 
     // Move selected image to the beginning of the array
     const imageUrl = product.images[index];
-    product.images.splice(index, 1);
-    product.images.unshift(imageUrl);
-    product.updatedAt = new Date();
+    const updatedImages = [...product.images];
+    updatedImages.splice(index, 1);
+    updatedImages.unshift(imageUrl);
 
-    // Save updated product
-    await product.save();
+    // Update product in Firestore
+    await productDoc.ref.update({
+      images: updatedImages,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
     // Return updated image URLs
     return res.json({
       success: true,
       data: {
-        imageUrls: product.images
+        imageUrls: updatedImages
       }
     });
   } catch (error) {

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { promisify } from 'util';
-import { admin } from '../firebase';
+import { admin } from '../../server/firebase';
 import sharp from 'sharp';
 
 const bucket = admin.storage().bucket();

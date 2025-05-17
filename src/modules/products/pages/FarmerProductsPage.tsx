@@ -3,9 +3,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../modules/auth';
 import { useProducts } from '../hooks/useProducts';
-import ProductCard from '../components/ProductCard';
-import ProductStatusBadge from '../components/ProductStatusBadge';
 import { formatPrice, formatDate } from '../../../shared/utils';
+import type { ProductStatus } from '../../../shared/types';
+import ProductStatusBadge from '../components/ProductStatusBadge';
 
 const FarmerProductsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,17 +17,20 @@ const FarmerProductsPage: React.FC = () => {
   const limit = 12;
   
   // Check if user is a farmer
-  if (user?.role !== 'farmer') {
-    navigate('/');
-    return null;
-  }
+  useEffect(() => {
+    if (user && user.role !== 'farmer') {
+      navigate('/');
+    }
+  }, [user, navigate]);
   
   // Fetch farmer's products when component mounts or filters change
   useEffect(() => {
     if (user?._id) {
       fetchProducts({
         farmer: user._id,
-        status: statusFilter === 'all' ? undefined : statusFilter,
+        // Use productStatus for filtering instead of status
+        // Pass statusFilter as 'any' only if it's 'all'
+        ...(statusFilter !== 'all' ? { productStatus: statusFilter as ProductStatus } : {}),
         page,
         limit
       });
@@ -62,7 +65,7 @@ const FarmerProductsPage: React.FC = () => {
       // Refresh products list
       fetchProducts({
         farmer: user?._id,
-        status: statusFilter === 'all' ? undefined : statusFilter,
+        ...(statusFilter !== 'all' ? { productStatus: statusFilter as ProductStatus } : {}),
         page,
         limit
       });
@@ -80,6 +83,14 @@ const FarmerProductsPage: React.FC = () => {
     { value: 'shipped', label: 'Wysłane' },
     { value: 'delivered', label: 'Dostarczone' }
   ];
+  
+  if (!user) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
   
   return (
     <div className="container mx-auto px-4 py-8">

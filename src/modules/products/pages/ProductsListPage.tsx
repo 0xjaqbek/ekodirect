@@ -1,4 +1,4 @@
-// src/modules/products/pages/ProductsListPage.tsx
+// src/modules/products/pages/ProductsListPage.tsx - Fixed version
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../modules/auth';
@@ -10,7 +10,7 @@ const ProductsListPage: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { filters, updateFilters, resetFilters } = useProducts();
+  const { updateFilters, resetFilters } = useProducts();
   
   // Parse filters from URL query parameters
   useEffect(() => {

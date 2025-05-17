@@ -22,7 +22,6 @@ export interface User {
   }
   
   export interface Product {
-    distance: boolean;
     _id: string;
     name: string;
     description: string;
@@ -42,6 +41,7 @@ export interface User {
     reviews: string[]; // referencje do Review
     averageRating: number;
     isCertified: boolean;
+    distance?: number; // Changed from boolean to optional number
     createdAt: Date;
     updatedAt: Date;
   }

@@ -7,7 +7,7 @@ import {
   isProductOwner, 
   validateProductData, 
   configureProductImageUpload 
-} from '../middleware/product';
+} from '../middleware/products';
 import { 
   getProducts, 
   getProductById, 
@@ -26,7 +26,7 @@ import {
   getProductStatusHistory,
   getProductTracking
 } from '../controllers/productStatusController';
-import { VALIDATION } from '../constants';
+import { VALIDATION } from '../../src/shared/constants';
 
 const router = express.Router();
 

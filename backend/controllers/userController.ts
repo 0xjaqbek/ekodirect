@@ -1,56 +1,25 @@
 // backend/controllers/userController.ts
 import { Request, Response } from 'express';
-import { User } from '../models/User';
-import multer from 'multer';
+import { admin } from '../firebase';
 import path from 'path';
 import fs from 'fs';
-import { admin } from '../firebase.js';
 
-// Inicjalizacja Firestore
+// Initialize Firestore
 const db = admin.firestore();
 const usersCollection = db.collection('users');
 
-// Konfiguracja przechowywania plików
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = 'uploads/avatars';
-    // Upewnij się, że katalog istnieje
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-// Filtrowanie typów plików
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Dozwolone są tylko pliki graficzne!'));
-  }
-};
-
-// Konfiguracja uploadera
-export const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5 MB
-});
+// Initialize Firebase Storage
+const bucket = admin.storage().bucket();
 
 /**
- * Pobierz profil zalogowanego użytkownika
+ * Get current user profile
  */
 export const getCurrentUser = async (req: Request, res: Response) => {
   try {
-    // Użytkownik jest już załączony przez middleware auth
+    // User is already attached by auth middleware
     const userId = req.user.id;
     
-    // Pobierz użytkownika z bazy
+    // Get user from database
     const userDoc = await usersCollection.doc(userId).get();
     
     if (!userDoc.exists) {
@@ -60,7 +29,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       });
     }
     
-    // Przygotuj dane użytkownika (bez hasła)
+    // Prepare user data (without password)
     const userData = userDoc.data();
     const { passwordHash, ...userWithoutPassword } = userData;
     
@@ -81,13 +50,13 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 };
 
 /**
- * Pobierz profil użytkownika po ID
+ * Get user profile by ID
  */
 export const getUserById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
-    // Pobierz użytkownika z bazy
+    // Get user from database
     const userDoc = await usersCollection.doc(id).get();
     
     if (!userDoc.exists) {
@@ -97,7 +66,7 @@ export const getUserById = async (req: Request, res: Response) => {
       });
     }
     
-    // Przygotuj dane użytkownika (bez hasła)
+    // Prepare user data (without password)
     const userData = userDoc.data();
     const { passwordHash, ...userWithoutPassword } = userData;
     
@@ -118,14 +87,14 @@ export const getUserById = async (req: Request, res: Response) => {
 };
 
 /**
- * Aktualizuj profil użytkownika
+ * Update user profile
  */
 export const updateUserProfile = async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
     const { fullName, phoneNumber, bio, location } = req.body;
     
-    // Walidacja danych
+    // Validate data
     if (!fullName || !phoneNumber || !location) {
       return res.status(400).json({
         success: false,
@@ -133,7 +102,7 @@ export const updateUserProfile = async (req: Request, res: Response) => {
       });
     }
     
-    // Zaktualizuj użytkownika w bazie
+    // Update user in database
     await usersCollection.doc(userId).update({
       fullName,
       phoneNumber,
@@ -142,7 +111,7 @@ export const updateUserProfile = async (req: Request, res: Response) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Pobierz zaktualizowane dane
+    // Get updated user data
     const updatedUserDoc = await usersCollection.doc(userId).get();
     const userData = updatedUserDoc.data();
     const { passwordHash, ...userWithoutPassword } = userData;
@@ -164,7 +133,7 @@ export const updateUserProfile = async (req: Request, res: Response) => {
 };
 
 /**
- * Upload zdjęcia profilowego
+ * Upload profile image
  */
 export const uploadProfileImage = async (req: Request, res: Response) => {
   try {
@@ -176,30 +145,56 @@ export const uploadProfileImage = async (req: Request, res: Response) => {
     }
     
     const userId = req.user.id;
-    const filePath = req.file.path;
+    const file = req.file;
     
-    // W rzeczywistym projekcie tutaj byłby upload pliku do Cloudinary lub innego serwisu
-    // Dla uproszczenia, używamy lokalnego URL
-    const profileImageUrl = `${req.protocol}://${req.get('host')}/${filePath}`;
+    // Upload file to Firebase Storage
+    const fileName = `profile_images/${userId}_${Date.now()}_${path.basename(file.originalname)}`;
+    const fileUpload = bucket.file(fileName);
     
-    // Zaktualizuj URL zdjęcia w profilu użytkownika
-    await usersCollection.doc(userId).update({
-      profileImage: profileImageUrl,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    // Pobierz zaktualizowane dane
-    const updatedUserDoc = await usersCollection.doc(userId).get();
-    const userData = updatedUserDoc.data();
-    const { passwordHash, ...userWithoutPassword } = userData;
-    
-    res.json({
-      success: true,
-      data: {
-        id: updatedUserDoc.id,
-        ...userWithoutPassword
+    // Create write stream
+    const blobStream = fileUpload.createWriteStream({
+      metadata: {
+        contentType: file.mimetype
       }
     });
+    
+    blobStream.on('error', (error) => {
+      console.error('Error uploading to Firebase Storage:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Wystąpił błąd podczas przesyłania pliku'
+      });
+    });
+    
+    blobStream.on('finish', async () => {
+      // Make the file publicly accessible
+      await fileUpload.makePublic();
+      
+      // Get public URL
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      
+      // Update user profile with new image URL
+      await usersCollection.doc(userId).update({
+        profileImage: publicUrl,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Get updated user data
+      const updatedUserDoc = await usersCollection.doc(userId).get();
+      const userData = updatedUserDoc.data();
+      const { passwordHash, ...userWithoutPassword } = userData;
+      
+      res.json({
+        success: true,
+        data: {
+          id: updatedUserDoc.id,
+          ...userWithoutPassword
+        }
+      });
+    });
+    
+    // End the stream with the file buffer
+    blobStream.end(file.buffer);
   } catch (error) {
     console.error('Upload profile image error:', error);
     res.status(500).json({

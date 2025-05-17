@@ -3,10 +3,13 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import { User } from '../models/User';
-import { Token } from '../models/Token';
-import { emailService } from '../services/emailService';
+import { admin } from '../firebase';
 import { config } from '../config';
+
+// Initialize Firestore
+const db = admin.firestore();
+const usersCollection = db.collection('users');
+const tokensCollection = db.collection('tokens');
 
 const JWT_SECRET = config.jwtSecret;
 const JWT_REFRESH_SECRET = config.jwtRefreshSecret;
@@ -21,8 +24,9 @@ export const register = async (req: Request, res: Response) => {
     const { email, password, fullName, role, phoneNumber, location } = req.body;
 
     // Check if user with this email already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    const userSnapshot = await usersCollection.where('email', '==', email).get();
+    
+    if (!userSnapshot.empty) {
       return res.status(400).json({
         success: false,
         error: 'Użytkownik z tym adresem email już istnieje'
@@ -34,7 +38,7 @@ export const register = async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     // Create new user
-    const user = new User({
+    const userData = {
       email,
       passwordHash,
       fullName,
@@ -46,45 +50,41 @@ export const register = async (req: Request, res: Response) => {
         address: location.address
       },
       isVerified: false,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
 
-    // Save user to database
-    await user.save();
-
+    // Save user to Firestore
+    const userRef = await usersCollection.add(userData);
+    
     // Generate verification token
     const verificationToken = crypto.randomBytes(32).toString('hex');
     
     // Save token to database
-    const token = new Token({
-      user: user._id,
+    await tokensCollection.add({
+      user: userRef.id,
       token: verificationToken,
       type: 'email-verification',
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    
-    await token.save();
 
-    // Send verification email
+    // Send verification email (implementation will vary)
     const verificationUrl = `${config.frontendUrl}/verify-email?token=${verificationToken}`;
     
-    await emailService.sendVerificationEmail({
-      to: user.email,
-      name: user.fullName,
-      verificationUrl
-    });
+    // Mock email service call for now
+    console.log(`Sending verification email to ${email} with URL: ${verificationUrl}`);
 
     // Return success response without sensitive data
     res.status(201).json({
       success: true,
       data: {
         user: {
-          _id: user._id,
-          email: user.email,
-          fullName: user.fullName,
-          role: user.role,
-          isVerified: user.isVerified
+          _id: userRef.id,
+          email: userData.email,
+          fullName: userData.fullName,
+          role: userData.role,
+          isVerified: userData.isVerified
         }
       },
       message: 'Rejestracja zakończona sukcesem. Sprawdź swoją skrzynkę email, aby zweryfikować konto.'
@@ -106,17 +106,21 @@ export const login = async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
     // Find user by email
-    const user = await User.findOne({ email });
+    const userSnapshot = await usersCollection.where('email', '==', email).get();
     
-    if (!user) {
+    if (userSnapshot.empty) {
       return res.status(401).json({
         success: false,
         error: 'Nieprawidłowy email lub hasło'
       });
     }
 
+    // Get user data
+    const userDoc = userSnapshot.docs[0];
+    const userData = userDoc.data();
+    
     // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(password, userData.passwordHash);
     
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -126,7 +130,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Check if email is verified
-    if (!user.isVerified) {
+    if (!userData.isVerified) {
       return res.status(401).json({
         success: false,
         error: 'Konto nie zostało zweryfikowane. Sprawdź swoją skrzynkę email.'
@@ -135,45 +139,46 @@ export const login = async (req: Request, res: Response) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user._id }, 
+      { userId: userDoc.id }, 
       JWT_SECRET, 
       { expiresIn: JWT_EXPIRES_IN }
     );
 
     // Generate refresh token
     const refreshToken = jwt.sign(
-      { userId: user._id }, 
+      { userId: userDoc.id }, 
       JWT_REFRESH_SECRET, 
       { expiresIn: JWT_REFRESH_EXPIRES_IN }
     );
 
     // Save refresh token to database
-    const tokenDoc = new Token({
-      user: user._id,
+    await tokensCollection.add({
+      user: userDoc.id,
       token: refreshToken,
       type: 'refresh',
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    
-    await tokenDoc.save();
 
     // Update last login timestamp
-    user.lastLoginAt = new Date();
-    await user.save();
+    await userDoc.ref.update({
+      lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
     // Return user data and tokens
     res.json({
       success: true,
       data: {
         user: {
-          _id: user._id,
-          email: user.email,
-          fullName: user.fullName,
-          role: user.role,
-          phoneNumber: user.phoneNumber,
-          location: user.location,
-          profileImage: user.profileImage,
-          isVerified: user.isVerified
+          _id: userDoc.id,
+          email: userData.email,
+          fullName: userData.fullName,
+          role: userData.role,
+          phoneNumber: userData.phoneNumber,
+          location: userData.location,
+          profileImage: userData.profileImage,
+          isVerified: userData.isVerified
         },
         token,
         refreshToken
@@ -206,7 +211,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     let decoded;
     try {
       decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { userId: string };
-    } catch  {
+    } catch {
       return res.status(401).json({
         success: false,
         error: 'Nieprawidłowy lub wygasły token odświeżający'
@@ -214,23 +219,34 @@ export const refreshToken = async (req: Request, res: Response) => {
     }
 
     // Check if token exists in database
-    const tokenDoc = await Token.findOne({
-      token: refreshToken,
-      type: 'refresh',
-      expiresAt: { $gt: new Date() }
-    });
+    const tokenSnapshot = await tokensCollection
+      .where('token', '==', refreshToken)
+      .where('type', '==', 'refresh')
+      .get();
 
-    if (!tokenDoc) {
+    if (tokenSnapshot.empty) {
       return res.status(401).json({
         success: false,
         error: 'Token odświeżający nie istnieje lub wygasł'
       });
     }
 
-    // Get user from database
-    const user = await User.findById(decoded.userId);
+    const tokenDoc = tokenSnapshot.docs[0];
+    const tokenData = tokenDoc.data();
     
-    if (!user) {
+    // Check if token is expired
+    if (tokenData.expiresAt.toDate() < new Date()) {
+      await tokenDoc.ref.delete();
+      return res.status(401).json({
+        success: false,
+        error: 'Token odświeżający wygasł'
+      });
+    }
+
+    // Get user from database
+    const userDoc = await usersCollection.doc(decoded.userId).get();
+    
+    if (!userDoc.exists) {
       return res.status(401).json({
         success: false,
         error: 'Użytkownik nie istnieje'
@@ -239,30 +255,29 @@ export const refreshToken = async (req: Request, res: Response) => {
 
     // Generate new JWT token
     const newToken = jwt.sign(
-      { userId: user._id }, 
+      { userId: userDoc.id }, 
       JWT_SECRET, 
       { expiresIn: JWT_EXPIRES_IN }
     );
 
     // Generate new refresh token
     const newRefreshToken = jwt.sign(
-      { userId: user._id }, 
+      { userId: userDoc.id }, 
       JWT_REFRESH_SECRET, 
       { expiresIn: JWT_REFRESH_EXPIRES_IN }
     );
 
     // Remove old refresh token
-    await Token.deleteOne({ _id: tokenDoc._id });
+    await tokenDoc.ref.delete();
 
     // Save new refresh token to database
-    const newTokenDoc = new Token({
-      user: user._id,
+    await tokensCollection.add({
+      user: userDoc.id,
       token: newRefreshToken,
       type: 'refresh',
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    
-    await newTokenDoc.save();
 
     // Return new tokens
     res.json({
@@ -296,23 +311,34 @@ export const verifyEmail = async (req: Request, res: Response) => {
     }
 
     // Find token in database
-    const tokenDoc = await Token.findOne({
-      token,
-      type: 'email-verification',
-      expiresAt: { $gt: new Date() }
-    });
+    const tokenSnapshot = await tokensCollection
+      .where('token', '==', token)
+      .where('type', '==', 'email-verification')
+      .get();
 
-    if (!tokenDoc) {
+    if (tokenSnapshot.empty) {
       return res.status(400).json({
         success: false,
         error: 'Nieprawidłowy lub wygasły token weryfikacyjny'
       });
     }
 
-    // Find user and update verification status
-    const user = await User.findById(tokenDoc.user);
+    const tokenDoc = tokenSnapshot.docs[0];
+    const tokenData = tokenDoc.data();
     
-    if (!user) {
+    // Check if token is expired
+    if (tokenData.expiresAt.toDate() < new Date()) {
+      await tokenDoc.ref.delete();
+      return res.status(400).json({
+        success: false,
+        error: 'Token weryfikacyjny wygasł'
+      });
+    }
+
+    // Find user and update verification status
+    const userDoc = await usersCollection.doc(tokenData.user).get();
+    
+    if (!userDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Użytkownik nie istnieje'
@@ -320,12 +346,13 @@ export const verifyEmail = async (req: Request, res: Response) => {
     }
 
     // Update verification status
-    user.isVerified = true;
-    user.updatedAt = new Date();
-    await user.save();
+    await userDoc.ref.update({
+      isVerified: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
     // Remove token
-    await Token.deleteOne({ _id: tokenDoc._id });
+    await tokenDoc.ref.delete();
 
     // Return success
     res.json({
@@ -352,10 +379,10 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     const { email } = req.body;
 
     // Find user by email
-    const user = await User.findOne({ email });
+    const userSnapshot = await usersCollection.where('email', '==', email).get();
     
     // Don't reveal if user exists for security reasons
-    if (!user) {
+    if (userSnapshot.empty) {
       return res.json({
         success: true,
         data: {
@@ -365,27 +392,26 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
       });
     }
 
+    const userDoc = userSnapshot.docs[0];
+    const userData = userDoc.data();
+
     // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
     
     // Save token to database
-    const token = new Token({
-      user: user._id,
+    await tokensCollection.add({
+      user: userDoc.id,
       token: resetToken,
       type: 'password-reset',
-      expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000) // 1 hour
+      expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000), // 1 hour
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    
-    await token.save();
 
-    // Send password reset email
+    // Send password reset email (implementation will vary)
     const resetUrl = `${config.frontendUrl}/reset-password?token=${resetToken}`;
     
-    await emailService.sendPasswordResetEmail({
-      to: user.email,
-      name: user.fullName,
-      resetUrl
-    });
+    // Mock email service call for now
+    console.log(`Sending password reset email to ${email} with URL: ${resetUrl}`);
 
     // Return success
     res.json({
@@ -419,23 +445,34 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 
     // Find token in database
-    const tokenDoc = await Token.findOne({
-      token,
-      type: 'password-reset',
-      expiresAt: { $gt: new Date() }
-    });
+    const tokenSnapshot = await tokensCollection
+      .where('token', '==', token)
+      .where('type', '==', 'password-reset')
+      .get();
 
-    if (!tokenDoc) {
+    if (tokenSnapshot.empty) {
       return res.status(400).json({
         success: false,
         error: 'Nieprawidłowy lub wygasły token resetowania hasła'
       });
     }
 
-    // Find user
-    const user = await User.findById(tokenDoc.user);
+    const tokenDoc = tokenSnapshot.docs[0];
+    const tokenData = tokenDoc.data();
     
-    if (!user) {
+    // Check if token is expired
+    if (tokenData.expiresAt.toDate() < new Date()) {
+      await tokenDoc.ref.delete();
+      return res.status(400).json({
+        success: false,
+        error: 'Token resetowania hasła wygasł'
+      });
+    }
+
+    // Find user
+    const userDoc = await usersCollection.doc(tokenData.user).get();
+    
+    if (!userDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Użytkownik nie istnieje'
@@ -447,15 +484,25 @@ export const resetPassword = async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(newPassword, salt);
 
     // Update user password
-    user.passwordHash = passwordHash;
-    user.updatedAt = new Date();
-    await user.save();
+    await userDoc.ref.update({
+      passwordHash,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
     // Remove token
-    await Token.deleteOne({ _id: tokenDoc._id });
+    await tokenDoc.ref.delete();
 
-    // Invalidate all refresh tokens for this user
-    await Token.deleteMany({ user: user._id, type: 'refresh' });
+    // Remove all refresh tokens for this user (logout from all devices)
+    const refreshTokensSnapshot = await tokensCollection
+      .where('user', '==', userDoc.id)
+      .where('type', '==', 'refresh')
+      .get();
+    
+    const batch = db.batch();
+    refreshTokensSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
 
     // Return success
     res.json({

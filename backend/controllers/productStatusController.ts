@@ -1,7 +1,11 @@
 // backend/controllers/productStatusController.ts
 import { Request, Response } from 'express';
-import { Product } from '../models/Product';
-import { PRODUCT_STATUSES } from '../constants';
+import { admin } from '../firebase';
+import { PRODUCT_STATUSES } from '../../src/shared/constants';
+
+// Initialize Firestore
+const db = admin.firestore();
+const productsCollection = db.collection('products');
 
 /**
  * Update product status
@@ -21,43 +25,54 @@ export const updateProductStatus = async (req: Request, res: Response) => {
     }
 
     // Check if product exists
-    const product = await Product.findById(id);
-    if (!product) {
+    const productDoc = await productsCollection.doc(id).get();
+    
+    if (!productDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
     }
 
+    const product = productDoc.data();
+
     // Check if user is the owner
-    if (product.owner.toString() !== userId) {
+    if (product.owner !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do zmiany statusu tego produktu.'
       });
     }
 
-    // Update status
-    product.status = status;
-
-    // Add to status history
-    product.statusHistory.push({
+    // Create status history item
+    const statusHistoryItem = {
       status,
-      timestamp: new Date(),
-      updatedBy: userId,
-      note: note || undefined
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: userId
+    };
+
+    if (note) {
+      statusHistoryItem['note'] = note;
+    }
+
+    // Update product in Firestore
+    await productDoc.ref.update({
+      status,
+      statusHistory: admin.firestore.FieldValue.arrayUnion(statusHistoryItem),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // Update timestamp
-    product.updatedAt = new Date();
-
-    // Save updated product
-    await product.save();
+    // Get updated product
+    const updatedProductDoc = await productsCollection.doc(id).get();
+    const updatedProduct = {
+      _id: updatedProductDoc.id,
+      ...updatedProductDoc.data()
+    };
 
     // Return updated product
     return res.json({
       success: true,
-      data: product
+      data: updatedProduct
     });
   } catch (error) {
     console.error('Error updating product status:', error);
@@ -76,20 +91,41 @@ export const getProductStatusHistory = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Check if product exists
-    const product = await Product.findById(id)
-      .populate('statusHistory.updatedBy', 'fullName');
+    const productDoc = await productsCollection.doc(id).get();
     
-    if (!product) {
+    if (!productDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
     }
 
+    const product = productDoc.data();
+
+    // Populate user data for each status history item
+    const statusHistory = await Promise.all(
+      product.statusHistory.map(async (item) => {
+        // Get user who updated the status
+        const userDoc = await db.collection('users').doc(item.updatedBy).get();
+        
+        if (userDoc.exists) {
+          return {
+            ...item,
+            updatedBy: {
+              _id: userDoc.id,
+              fullName: userDoc.data().fullName
+            }
+          };
+        }
+        
+        return item;
+      })
+    );
+
     // Return status history
     return res.json({
       success: true,
-      data: product.statusHistory
+      data: statusHistory
     });
   } catch (error) {
     console.error('Error getting product status history:', error);
@@ -108,30 +144,66 @@ export const getProductTracking = async (req: Request, res: Response) => {
     const { trackingId } = req.params;
 
     // Find product by tracking ID
-    const product = await Product.findOne({ trackingId })
-      .populate('owner', 'fullName location')
-      .populate('statusHistory.updatedBy', 'fullName')
-      .exec();
+    const productsSnapshot = await productsCollection
+      .where('trackingId', '==', trackingId)
+      .limit(1)
+      .get();
 
-    if (!product) {
+    if (productsSnapshot.empty) {
       return res.status(404).json({
         success: false,
         error: 'Produkt o podanym identyfikatorze śledzenia nie został znaleziony.'
       });
     }
 
+    const productDoc = productsSnapshot.docs[0];
+    const product = productDoc.data();
+
+    // Get owner data
+    const ownerDoc = await db.collection('users').doc(product.owner).get();
+    let owner = product.owner;
+    
+    if (ownerDoc.exists) {
+      const ownerData = ownerDoc.data();
+      owner = {
+        _id: ownerDoc.id,
+        fullName: ownerData.fullName,
+        location: ownerData.location
+      };
+    }
+
+    // Populate user data for each status history item
+    const statusHistory = await Promise.all(
+      product.statusHistory.map(async (item) => {
+        // Get user who updated the status
+        const userDoc = await db.collection('users').doc(item.updatedBy).get();
+        
+        if (userDoc.exists) {
+          return {
+            ...item,
+            updatedBy: {
+              _id: userDoc.id,
+              fullName: userDoc.data().fullName
+            }
+          };
+        }
+        
+        return item;
+      })
+    );
+
     // Return tracking information
     return res.json({
       success: true,
       data: {
         product: {
-          _id: product._id,
+          _id: productDoc.id,
           name: product.name,
           status: product.status,
           trackingId: product.trackingId,
-          statusHistory: product.statusHistory,
+          statusHistory: statusHistory,
           harvestDate: product.harvestDate,
-          owner: product.owner,
+          owner: owner,
           location: product.location
         }
       }
