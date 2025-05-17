@@ -393,8 +393,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     }
 
     const userDoc = userSnapshot.docs[0];
-    const userData = userDoc.data();
-
+    
     // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
     
