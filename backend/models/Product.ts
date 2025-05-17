@@ -1,4 +1,5 @@
-// backend/models/Product.ts
+// Fixed version of backend/models/Product.ts
+
 import { admin } from '../firebase';
 import { FirestoreProduct, ProductOwner, FirestoreTimestamp } from '../types';
 import { usersCollection } from './collections';
@@ -80,32 +81,39 @@ class ProductQueryBuilder {
 
     // Apply query filters
     Object.entries(this.query).forEach(([key, value]) => {
-      if (value === undefined) return;
-
-      // Handle special query operators
-      if (key === 'price' && typeof value === 'object' && value !== null) {
-        if (value.$gte !== undefined) {
-          firestoreQuery = firestoreQuery.where('price', '>=', value.$gte);
+        if (value === undefined) return;
+      
+        // Handle special query operators
+        if (key === 'price' && typeof value === 'object' && value !== null) {
+          // Type assertion to tell TypeScript this object might have these properties
+          const priceFilter = value as { $gte?: number; $lte?: number };
+          
+          if (priceFilter.$gte !== undefined) {
+            firestoreQuery = firestoreQuery.where('price', '>=', priceFilter.$gte);
+          }
+          if (priceFilter.$lte !== undefined) {
+            firestoreQuery = firestoreQuery.where('price', '<=', priceFilter.$lte);
+          }
+        } else if (key === 'certificates' && typeof value === 'object' && value !== null) {
+          // Type assertion for the certificates filter
+          const certFilter = value as { $in?: string[] };
+          
+          if (certFilter.$in && certFilter.$in.length > 0) {
+            // Firestore uses array-contains-any for this operation
+            firestoreQuery = firestoreQuery.where('certificates', 'array-contains-any', certFilter.$in);
+          }
+        } else if (key === 'status') {
+          firestoreQuery = firestoreQuery.where('status', '==', value);
+        } else if (key === 'owner') {
+          firestoreQuery = firestoreQuery.where('owner', '==', value);
+        } else if (key === 'category') {
+          firestoreQuery = firestoreQuery.where('category', '==', value);
+        } else if (key === 'subcategory') {
+          firestoreQuery = firestoreQuery.where('subcategory', '==', value);
+        } else if (key !== '$or') { // Skip $or for now - Firestore doesn't support it directly
+          firestoreQuery = firestoreQuery.where(key, '==', value);
         }
-        if (value.$lte !== undefined) {
-          firestoreQuery = firestoreQuery.where('price', '<=', value.$lte);
-        }
-      } else if (key === 'certificates' && typeof value === 'object' && value !== null && value.$in) {
-        // This is a simplification - Firestore doesn't support $in directly
-        // For array-contains-any, all array items must be in one query
-        firestoreQuery = firestoreQuery.where('certificates', 'array-contains-any', value.$in);
-      } else if (key === 'status') {
-        firestoreQuery = firestoreQuery.where('status', '==', value);
-      } else if (key === 'owner') {
-        firestoreQuery = firestoreQuery.where('owner', '==', value);
-      } else if (key === 'category') {
-        firestoreQuery = firestoreQuery.where('category', '==', value);
-      } else if (key === 'subcategory') {
-        firestoreQuery = firestoreQuery.where('subcategory', '==', value);
-      } else if (key !== '$or') { // Skip $or for now - Firestore doesn't support it directly
-        firestoreQuery = firestoreQuery.where(key, '==', value);
-      }
-    });
+      });
 
     // Execute the query
     const snapshot = await firestoreQuery.get();
@@ -138,29 +146,29 @@ class ProductQueryBuilder {
     });
 
     // Apply sorting
-    if (this.sortOpts) {
-      results.sort((a, b) => {
-        for (const [field, direction] of Object.entries(this.sortOpts)) {
-          if (field === 'createdAt') {
-            const dateA = this.toJsDate(a.createdAt);
-            const dateB = this.toJsDate(b.createdAt);
-            
-            // Handle sort direction
-            if (direction === 1) {
-              return dateA.getTime() - dateB.getTime();
-            } else {
-              return dateB.getTime() - dateA.getTime();
+    if (this.sortOpts !== null) {
+        results.sort((a, b) => {
+          for (const [field, direction] of Object.entries(this.sortOpts || {})) {
+            if (field === 'createdAt') {
+              const dateA = this.toJsDate(a.createdAt);
+              const dateB = this.toJsDate(b.createdAt);
+              
+              // Handle sort direction
+              if (direction === 1) {
+                return dateA.getTime() - dateB.getTime();
+              } else {
+                return dateB.getTime() - dateA.getTime();
+              }
             }
+            
+            // Handle normal field sorting
+            if (a[field] < b[field]) return -1 * direction;
+            if (a[field] > b[field]) return 1 * direction;
           }
           
-          // Handle normal field sorting
-          if (a[field] < b[field]) return -1 * direction;
-          if (a[field] > b[field]) return 1 * direction;
-        }
-        
-        return 0;
-      });
-    }
+          return 0;
+        });
+      }
 
     // Apply pagination
     if (this.skipValue > 0) {
@@ -185,9 +193,9 @@ class ProductQueryBuilder {
   private toJsDate(value: Date | FirestoreTimestamp | string | number | undefined): Date {
     if (!value) return new Date();
     
-    // Handle Firebase Timestamp objects
-    if (typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
-      return value.toDate();
+    // Handle Firebase Timestamp objects with type checking
+    if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
+      return (value as FirestoreTimestamp).toDate();
     }
     
     // Handle Date objects
@@ -195,8 +203,13 @@ class ProductQueryBuilder {
       return value;
     }
     
-    // Handle string or number
-    return new Date(value);
+    // Handle string or number by creating a new Date
+    if (typeof value === 'string' || typeof value === 'number') {
+      return new Date(value);
+    }
+    
+    // Default case - return current date
+    return new Date();
   }
 
   // Helper method to populate owner references
@@ -210,6 +223,7 @@ class ProductQueryBuilder {
             const ownerData = ownerDoc.data();
             if (ownerData) {
               // Remove sensitive data but avoid using the variable directly
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
               const { passwordHash, ...safeOwnerData } = ownerData;
               
               return {
