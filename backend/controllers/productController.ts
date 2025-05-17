@@ -206,7 +206,12 @@ export const getProductById = async (req: Request, res: Response) => {
  */
 export const createProduct = async (req: Request, res: Response) => {
   try {
-    // Get user ID from authenticated user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
 
     // Get form data
@@ -304,6 +309,13 @@ export const createProduct = async (req: Request, res: Response) => {
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    // Add null check before accessing req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
 
     // Check if product exists
@@ -422,8 +434,15 @@ export const updateProduct = async (req: Request, res: Response) => {
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    // Add null check before accessing req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
-
+    
     // Check if product exists
     const product = await Product.findById(id);
     if (!product) {
@@ -432,9 +451,9 @@ export const deleteProduct = async (req: Request, res: Response) => {
         error: 'Produkt nie znaleziony.'
       });
     }
-
-    // Check if user is the owner or admin
-    if ((product.owner as string) !== userId && req.user.role !== 'admin') {
+    
+    // Since we've already checked req.user above, this is safe
+    if (product.owner !== userId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do usunięcia tego produktu.'
