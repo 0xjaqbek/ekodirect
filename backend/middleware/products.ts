@@ -19,36 +19,38 @@ declare module 'express' {
  * Middleware to check if a product exists
  */
 export const productExists = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { id } = req.params;
-    
-    // Check if product exists
-    const productDoc = await productsCollection.doc(id).get();
-    
-    if (!productDoc.exists) {
-      return res.status(404).json({
+    try {
+      const { id } = req.params;
+      
+      // Check if product exists
+      const productDoc = await productsCollection.doc(id).get();
+      
+      if (!productDoc.exists) {
+        res.status(404).json({
+          success: false,
+          error: 'Produkt nie znaleziony'
+        });
+        return; // Don't return the response object
+      }
+      
+      // Add product data to request object with proper typing
+      const productData = productDoc.data();
+      req.productData = {
+        _id: id,
+        ...productData
+      } as FirestoreProduct;
+      req.productId = id;
+      
+      next();
+    } catch (error) {
+      console.error('Product exists middleware error:', error);
+      res.status(500).json({
         success: false,
-        error: 'Produkt nie znaleziony'
+        error: 'Wystąpił błąd podczas weryfikacji produktu'
       });
+      // No return statement needed here as it's the end of the function
     }
-    
-    // Add product data to request object with proper typing
-    const productData = productDoc.data();
-    req.productData = {
-      _id: id,
-      ...productData
-    } as FirestoreProduct;
-    req.productId = id;
-    
-    next();
-  } catch (error) {
-    console.error('Product exists middleware error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas weryfikacji produktu'
-    });
-  }
-};
+  };
 
 /**
  * Middleware to check if user is the owner of the product
@@ -87,60 +89,66 @@ export const isProductOwner = async (req: Request, res: Response, next: NextFunc
  * Middleware to validate product data
  */
 export const validateProductData = (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { name, description, price, quantity, unit, category } = req.body;
-    
-    // Required fields
-    if (!name || !description || !price || !quantity || !unit || !category) {
-      return res.status(400).json({
+    try {
+      const { name, description, price, quantity, unit, category } = req.body;
+      
+      // Required fields
+      if (!name || !description || !price || !quantity || !unit || !category) {
+        res.status(400).json({
+          success: false,
+          error: 'Brakujące wymagane pola'
+        });
+        return; // Just return, don't return the response
+      }
+      
+      // Name validation
+      if (name.length < 3 || name.length > 100) {
+        res.status(400).json({
+          success: false,
+          error: 'Nazwa produktu musi mieć od 3 do 100 znaków'
+        });
+        return; // Just return, don't return the response
+      }
+      
+      // Description validation
+      if (description.length < 10 || description.length > 2000) {
+        res.status(400).json({
+          success: false,
+          error: 'Opis produktu musi mieć od 10 do 2000 znaków'
+        });
+        return; // Just return, don't return the response
+      }
+      
+      // Price validation
+      const priceNumber = parseFloat(price);
+      if (isNaN(priceNumber) || priceNumber <= 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Cena musi być liczbą dodatnią'
+        });
+        return; // Just return, don't return the response
+      }
+      
+      // Quantity validation
+      const quantityNumber = parseInt(quantity, 10);
+      if (isNaN(quantityNumber) || quantityNumber <= 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Ilość musi być liczbą całkowitą dodatnią'
+        });
+        return; // Just return, don't return the response
+      }
+      
+      next();
+    } catch (error) {
+      console.error('Validate product data middleware error:', error);
+      res.status(500).json({
         success: false,
-        error: 'Brakujące wymagane pola'
+        error: 'Wystąpił błąd podczas walidacji danych produktu'
       });
+      // No return needed here as it's the end of the function
     }
-    
-    // Name validation
-    if (name.length < 3 || name.length > 100) {
-      return res.status(400).json({
-        success: false,
-        error: 'Nazwa produktu musi mieć od 3 do 100 znaków'
-      });
-    }
-    
-    // Description validation
-    if (description.length < 10 || description.length > 2000) {
-      return res.status(400).json({
-        success: false,
-        error: 'Opis produktu musi mieć od 10 do 2000 znaków'
-      });
-    }
-    
-    // Price validation
-    const priceNumber = parseFloat(price);
-    if (isNaN(priceNumber) || priceNumber <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Cena musi być liczbą dodatnią'
-      });
-    }
-    
-    // Quantity validation
-    const quantityNumber = parseInt(quantity, 10);
-    if (isNaN(quantityNumber) || quantityNumber <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Ilość musi być liczbą całkowitą dodatnią'
-      });
-    }
-    
-    next();
-  } catch (error) {
-    console.error('Validate product data middleware error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas walidacji danych produktu'
-    });
-  }
-};
+  };
 
 // Configure storage for multer
 const storage = multer.memoryStorage();

@@ -5,7 +5,9 @@ import { calculateDistance } from '../utils/geoUtils';
 import { generateTrackingId } from '../utils/productUtils';
 import { productsCollection, usersCollection } from '../models/collections';
 import { FirestoreProduct, ProductOwner } from '../types';
+import { convertToDate } from '../../src/shared/utils/firebase';
 import { uploadImageToStorage } from '../services/fileStorageService';
+
 
 // Interface for the product data coming from the request body (likely FormData)
 interface ProductRequestBody {
@@ -37,6 +39,7 @@ interface UserDocData extends admin.firestore.DocumentData {
   };
   role?: string;
 }
+
 /**
  * Get all products with filtering, sorting, and pagination
  */
@@ -190,16 +193,20 @@ export const getProductById = async (req: Request, res: Response) => {
       try {
         const ownerDoc = await usersCollection.doc(product.owner as string).get();
         if (ownerDoc.exists) {
-          const ownerData = ownerDoc.data();
-          const { passwordHash, ...safeOwnerData } = ownerData;
+          const ownerData = ownerDoc.data() as UserDocData | undefined;
           
-          populatedProduct = {
-            ...product,
-            owner: {
-              _id: ownerDoc.id,
-              ...safeOwnerData
-            } as ProductOwner
-          };
+          if (ownerData) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { passwordHash, ...safeOwnerData } = ownerData;
+            
+            populatedProduct = {
+              ...product,
+              owner: {
+                _id: ownerDoc.id,
+                ...safeOwnerData
+              } as ProductOwner
+            };
+          }
         }
       } catch (error) {
         console.error('Error populating owner data:', error);
@@ -532,8 +539,9 @@ export const getProductsByFarmer = async (req: Request, res: Response) => {
 
     // Check if farmer exists
     const farmerDoc = await usersCollection.doc(farmerId as string).get();
+    const farmerData = farmerDoc.data();
     
-    if (!farmerDoc.exists || farmerDoc.data().role !== 'farmer') {
+    if (!farmerDoc.exists || !farmerData || farmerData.role !== 'farmer') {
       return res.status(404).json({
         success: false,
         error: 'Rolnik nie znaleziony.'
@@ -564,11 +572,11 @@ export const getProductsByFarmer = async (req: Request, res: Response) => {
     
     // Sort by created date (newest first)
     const sortedProducts = products.sort((a, b) => {
-      const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-      const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+      const dateA = convertToDate(a.createdAt) || new Date();
+      const dateB = convertToDate(b.createdAt) || new Date();
       return dateB.getTime() - dateA.getTime();
     });
-    
+
     // Apply pagination
     const paginationOffset = (Number(page) - 1) * Number(limit);
     const paginatedProducts = sortedProducts.slice(
@@ -604,27 +612,41 @@ function sortProducts(products: FirestoreProduct[], sortBy: string, sortOrder: s
     const multiplier = sortOrder === 'asc' ? 1 : -1;
     
     switch (sortBy) {
-      case 'price':
+      case 'price': {
         return (a.price - b.price) * multiplier;
+      }
       
-      case 'rating':
+      case 'rating': {
         return (a.averageRating - b.averageRating) * multiplier;
+      }
       
-      case 'distance':
+      case 'distance': {
         // Default to 0 if distance not calculated
         const distanceA = a.distance || 0;
         const distanceB = b.distance || 0;
         return (distanceA - distanceB) * multiplier;
+      }
       
       case 'date':
-      default:
-        const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-        const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+      default: {
+        // Import the convertToDate function if available
+        // const dateA = convertToDate(a.createdAt) || new Date();
+        // const dateB = convertToDate(b.createdAt) || new Date();
+        
+        // Or handle conversion manually
+        const dateA = a.createdAt instanceof Date ? a.createdAt :
+                     (a.createdAt && typeof a.createdAt === 'object' && 'toDate' in a.createdAt) 
+                     ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        
+        const dateB = b.createdAt instanceof Date ? b.createdAt :
+                     (b.createdAt && typeof b.createdAt === 'object' && 'toDate' in b.createdAt) 
+                     ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        
         return (dateB.getTime() - dateA.getTime()) * (sortOrder === 'asc' ? -1 : 1);
+      }
     }
   });
 }
-
 /**
  * Helper function to populate product owners
  */

@@ -247,3 +247,44 @@ export const getProductTracking = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Get product status history
+ */
+export const getProductStatusHistory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if product exists
+    const productDoc = await productsCollection.doc(id).get();
+    
+    if (!productDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: 'Produkt nie znaleziony.'
+      });
+    }
+
+    const productData = productDoc.data() as ProductData | undefined;
+    if (!productData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Brak danych produktu.'
+      });
+    }
+
+    // Return status history
+    return res.json({
+      success: true,
+      data: {
+        statusHistory: productData.statusHistory || []
+      }
+    });
+  } catch (error) {
+    console.error('Error getting product status history:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Wystąpił błąd podczas pobierania historii statusu produktu.'
+    });
+  }
+};
