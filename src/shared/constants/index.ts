@@ -89,7 +89,8 @@ export const API_ROUTES = {
     },
     USERS: {
       ME: '/api/users/me',
-      BY_ID: (id: string) => `/api/users/${id}`
+      BY_ID: (id: string) => `/api/users/${id}`,
+      AVATAR: '/api/users/me/avatar'
     },
     PRODUCTS: {
       LIST: '/api/products',

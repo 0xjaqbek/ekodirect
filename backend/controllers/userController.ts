@@ -5,7 +5,38 @@ import { calculateDistance } from '../utils/geoUtils';
 import { generateTrackingId } from '../utils/productUtils';
 import { productsCollection, usersCollection } from '../models/collections';
 import { FirestoreProduct, ProductOwner } from '../types';
+import { uploadImageToStorage } from '../services/fileStorageService';
 
+// Interface for the product data coming from the request body (likely FormData)
+interface ProductRequestBody {
+  name: string;
+  description: string;
+  price: string; // FormData sends numbers as strings
+  quantity: string; // FormData sends numbers as strings
+  unit: string;
+  category: string;
+  subcategory?: string;
+  harvestDate?: string; // ISO date string
+  certificates?: string | string[]; // Can be single or multiple
+  'location.coordinates[0]'?: string;
+  'location.coordinates[1]'?: string;
+  'location.address'?: string;
+}
+// Define an interface for the user document structure from Firestore
+// This helps TypeScript understand the shape of ownerData
+interface UserDocData extends admin.firestore.DocumentData {
+  passwordHash: string;
+  fullName: string;
+  email?: string;
+  phoneNumber?: string;
+  profileImage?: string;
+  location?: {
+    type: string;
+    coordinates: [number, number];
+    address: string;
+  };
+  role?: string;
+}
 /**
  * Get all products with filtering, sorting, and pagination
  */
@@ -54,10 +85,7 @@ export const getProducts = async (req: Request, res: Response) => {
 
     // Execute query
     const snapshot = await query.get();
-    
-    // Get total count for pagination
-    const totalCount = snapshot.size;
-    
+
     // Convert to array of products
     let products: FirestoreProduct[] = [];
     
@@ -91,8 +119,8 @@ export const getProducts = async (req: Request, res: Response) => {
         if (!product.location?.coordinates) return false;
         
         const distance = calculateDistance(
-          Number(lat),
-          Number(lng),
+          userLocation[1], // user latitude
+          userLocation[0], // user longitude
           product.location.coordinates[1],
           product.location.coordinates[0]
         );
@@ -209,8 +237,8 @@ export const createProduct = async (req: Request, res: Response) => {
       category,
       subcategory,
       harvestDate,
-      certificates
-    } = req.body;
+      certificates,
+    } = req.body as ProductRequestBody;
 
     // Parse location if provided
     let location;
@@ -221,7 +249,7 @@ export const createProduct = async (req: Request, res: Response) => {
           Number(req.body['location.coordinates[0]']),
           Number(req.body['location.coordinates[1]'])
         ] as [number, number],
-        address: req.body['location.address']
+        address: req.body['location.address'] as string // Ensured by the if condition
       };
     }
 
@@ -236,7 +264,7 @@ export const createProduct = async (req: Request, res: Response) => {
       subcategory,
       owner: userId,
       location,
-      harvestDate: harvestDate ? new Date(harvestDate) : null,
+      harvestDate: harvestDate ? new Date(harvestDate) : undefined, // FirestoreProduct allows Date | FirestoreTimestamp
       certificates: certificates ? Array.isArray(certificates) ? certificates : [certificates] : [],
       status: 'available',
       statusHistory: [
@@ -248,9 +276,9 @@ export const createProduct = async (req: Request, res: Response) => {
       ],
       trackingId: generateTrackingId(),
       isCertified: certificates && (Array.isArray(certificates) ? certificates.length > 0 : true),
-      images: [],
+      images: [] as string[],
       averageRating: 0,
-      reviews: [],
+      reviews: [] as string[],
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
@@ -260,8 +288,7 @@ export const createProduct = async (req: Request, res: Response) => {
     if (images && images.length > 0) {
       // Assuming you have a function to upload images and get URLs
       // This would typically involve uploading to Firebase Storage
-      const uploadImageToStorage = require('../services/fileStorageService').uploadImageToStorage;
-      
+
       const imageUrls = await Promise.all(
         images.map(async (file) => {
           return await uploadImageToStorage(file, 'products');
@@ -298,6 +325,23 @@ export const createProduct = async (req: Request, res: Response) => {
   }
 };
 
+// Specific type for Firestore update payload to avoid using 'any'
+// Allows FieldValue for atomic operations.
+type ProductFirestoreUpdateData = Partial<Omit<FirestoreProduct, 'createdAt' | 'updatedAt' | 'images' | 'statusHistory' | 'certificates' | 'location' | 'harvestDate'>> & {
+  name?: string;
+  description?: string;
+  price?: number;
+  quantity?: number;
+  unit?: string;
+  category?: string;
+  subcategory?: string | admin.firestore.FieldValue; // For deletion
+  location?: FirestoreProduct['location'] | admin.firestore.FieldValue; // For deletion
+  harvestDate?: Date | null | admin.firestore.FieldValue; // For deletion or setting to null
+  certificates?: string[];
+  isCertified?: boolean;
+  images?: admin.firestore.FieldValue; // For arrayUnion
+  updatedAt: admin.firestore.FieldValue;
+};
 /**
  * Update a product
  */
@@ -309,14 +353,15 @@ export const updateProduct = async (req: Request, res: Response) => {
     // Check if product exists
     const productDoc = await productsCollection.doc(id).get();
     
-    if (!productDoc.exists) {
+    const product = productDoc.data();
+    
+    // Add an explicit check for product data
+    if (!product) {
       return res.status(404).json({
         success: false,
-        error: 'Produkt nie znaleziony.'
+        error: 'Produkt nie znaleziony (brak danych).'
       });
     }
-
-    const product = productDoc.data();
     
     // Check if user is the owner
     if (product.owner !== userId) {
@@ -336,8 +381,8 @@ export const updateProduct = async (req: Request, res: Response) => {
       category,
       subcategory,
       harvestDate,
-      certificates
-    } = req.body;
+      certificates,
+    } = req.body as ProductRequestBody;
 
     // Parse location if provided
     let location;
@@ -348,13 +393,13 @@ export const updateProduct = async (req: Request, res: Response) => {
           Number(req.body['location.coordinates[0]']),
           Number(req.body['location.coordinates[1]'])
         ] as [number, number],
-        address: req.body['location.address']
+        address: req.body['location.address'] as string // Ensured by the if condition
       };
     }
 
     // Prepare update data
-    const updateData: Record<string, any> = {
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    const updateData: ProductFirestoreUpdateData = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     
     // Add fields to update only if they exist in the request
@@ -365,7 +410,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     if (unit) updateData.unit = unit;
     if (category) updateData.category = category;
     if (subcategory !== undefined) updateData.subcategory = subcategory;
-    if (harvestDate) updateData.harvestDate = new Date(harvestDate);
+    if (harvestDate) updateData.harvestDate = new Date(harvestDate); // Or FieldValue.delete() if null/undefined means delete
     if (location) updateData.location = location;
     
     // Update certificates if provided
@@ -378,8 +423,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     const images = req.files as Express.Multer.File[];
     if (images && images.length > 0) {
       // Assuming you have a function to upload images and get URLs
-      const uploadImageToStorage = require('../services/fileStorageService').uploadImageToStorage;
-      
+
       const imageUrls = await Promise.all(
         images.map(async (file) => {
           return await uploadImageToStorage(file, 'products');
@@ -424,14 +468,15 @@ export const deleteProduct = async (req: Request, res: Response) => {
     // Check if product exists
     const productDoc = await productsCollection.doc(id).get();
     
-    if (!productDoc.exists) {
+    const product = productDoc.data();
+    
+    // Add an explicit check for product data to satisfy TypeScript
+    if (!product) {
       return res.status(404).json({
         success: false,
-        error: 'Produkt nie znaleziony.'
+        error: 'Produkt nie znaleziony (brak danych po odczycie).'
       });
     }
-
-    const product = productDoc.data();
     
     // Check if user is the owner or admin
     if (product.owner !== userId && req.user.role !== 'admin') {
@@ -590,20 +635,24 @@ async function populateProductOwners(products: FirestoreProduct[]): Promise<Fire
         const ownerDoc = await usersCollection.doc(product.owner).get();
         
         if (ownerDoc.exists) {
-          const ownerData = ownerDoc.data();
-          // Remove sensitive data
-          const { passwordHash, ...safeOwnerData } = ownerData;
-          
-          return {
-            ...product,
-            owner: {
-              _id: ownerDoc.id,
-              ...safeOwnerData
-            } as ProductOwner
-          };
+          const ownerData = ownerDoc.data() as UserDocData | undefined; // Cast to our specific type
+
+          if (ownerData) { // Ensure ownerData is defined
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { passwordHash, ...safeOwnerData } = ownerData; // passwordHash is intentionally unused after destructuring
+            
+            return {
+              ...product,
+              owner: {
+                _id: ownerDoc.id,
+                ...safeOwnerData
+              } as ProductOwner // Cast to the expected ProductOwner type
+            };
+          }
         }
       } catch (error) {
         console.error(`Error populating owner for product ${product._id}:`, error);
+
       }
     }
     

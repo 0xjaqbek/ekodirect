@@ -1,4 +1,4 @@
-// backend/controllers/productStatusController.ts
+// backend/controllers/productStatusController.ts (Fixed version)
 import { Request, Response } from 'express';
 import { admin } from '../firebase';
 import { PRODUCT_STATUSES } from '../../src/shared/constants';
@@ -31,7 +31,7 @@ interface ProductData {
   owner: string;
   trackingId: string;
   statusHistory?: StatusHistoryItem[];
-  harvestDate?: Date | admin.firestore.Timestamp;
+  harvestDate?: admin.firestore.Timestamp | Date;
   location?: {
     coordinates: [number, number];
     address: string;
@@ -142,72 +142,7 @@ export const updateProductStatus = async (req: Request, res: Response) => {
 };
 
 /**
- * Get product status history
- */
-export const getProductStatusHistory = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    // Check if product exists
-    const productDoc = await productsCollection.doc(id).get();
-    
-    if (!productDoc.exists) {
-      return res.status(404).json({
-        success: false,
-        error: 'Produkt nie znaleziony.'
-      });
-    }
-
-    const productData = productDoc.data() as ProductData | undefined;
-    if (!productData) {
-      return res.status(404).json({
-        success: false,
-        error: 'Brak danych produktu.'
-      });
-    }
-
-    // Check if statusHistory exists and handle it safely
-    const statusHistory: StatusHistoryItem[] = productData.statusHistory || [];
-
-    // Populate user data for each status history item
-    const populatedStatusHistory = await Promise.all(
-      statusHistory.map(async (item: StatusHistoryItem) => {
-        // Get user who updated the status
-        const userDoc = await db.collection('users').doc(item.updatedBy).get();
-        
-        if (userDoc.exists) {
-          const userData = userDoc.data() as UserData | undefined;
-          if (userData) {
-            return {
-              ...item,
-              updatedBy: {
-                _id: userDoc.id,
-                fullName: userData.fullName
-              }
-            };
-          }
-        }
-        
-        return item;
-      })
-    );
-
-    // Return status history
-    return res.json({
-      success: true,
-      data: populatedStatusHistory
-    });
-  } catch (error) {
-    console.error('Error getting product status history:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas pobierania historii statusu produktu.'
-    });
-  }
-};
-
-/**
- * Get tracking information for a product
+ * Get product tracking information
  */
 export const getProductTracking = async (req: Request, res: Response) => {
   try {
@@ -278,6 +213,16 @@ export const getProductTracking = async (req: Request, res: Response) => {
       })
     );
 
+    // Convert Firebase Timestamp to Date for harvestDate
+    let harvestDate = null;
+    if (productData.harvestDate) {
+      if ('toDate' in productData.harvestDate && typeof productData.harvestDate.toDate === 'function') {
+        harvestDate = productData.harvestDate.toDate();
+      } else if (productData.harvestDate instanceof Date) {
+        harvestDate = productData.harvestDate;
+      }
+    }
+
     // Return tracking information
     return res.json({
       success: true,
@@ -288,7 +233,7 @@ export const getProductTracking = async (req: Request, res: Response) => {
           status: productData.status,
           trackingId: productData.trackingId,
           statusHistory: populatedStatusHistory,
-          harvestDate: productData.harvestDate,
+          harvestDate: harvestDate,
           owner: ownerData,
           location: productData.location
         }

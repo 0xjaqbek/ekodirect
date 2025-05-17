@@ -1,58 +1,89 @@
-// Zaktualizowany userProfileStore.ts z obsługą Firestore Timestamp
-
+// src/modules/users/store/userProfileStore.ts (Fixed version)
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import apiClient from '../../../shared/api';
-import { API_ROUTES, STORAGE_KEYS } from '../../../shared/constants';
+import { API_ROUTES } from '../../../shared/constants';
 import type { User } from '../../../shared/types';
-import { type FirebaseUserData } from '../../../shared/types/firebase';
+import { type FirebaseUserData, type FirebaseTimestamp } from '../../../shared/types/firebase';
 
-// Funkcja do normalizacji danych użytkownika z Firebase/Firestore
-const normalizeUserData = (userData: FirebaseUserData | null): User => {
-  // Obsługa przypadku, gdy userData jest null lub undefined
+// Function to normalize user data from Firebase/Firestore
+const normalizeUserData = (userData: FirebaseUserData | null): User | null => {
+  // Handle null userData
   if (!userData) return null;
 
-  // Przygotuj znormalizowane dane użytkownika
-  return {
-    ...userData,
-    // Upewnij się, że _id jest zdefiniowane (używając id z Firebase lub _id, jeśli istnieje)
+  // Prepare normalized user data
+  const normalizedUser: User = {
+    // Ensure _id is defined (using id from Firebase or _id if it exists)
     _id: userData._id || userData.id || '',
-    // Upewnij się, że lokalizacja ma właściwy format
-    location: userData.location || {
+    email: userData.email || '',
+    passwordHash: userData.passwordHash || '',
+    fullName: userData.fullName || '',
+    role: userData.role || 'consumer',
+    phoneNumber: userData.phoneNumber || '',
+    // Ensure location has proper format
+    location: {
       type: 'Point',
-      coordinates: [0, 0],
-      address: ''
+      coordinates: userData.location?.coordinates || [0, 0],
+      address: userData.location?.address || ''
     },
-    // Puste tablice jako domyślne wartości, jeśli nie istnieją
+    // Set default values for optional arrays
     certificates: userData.certificates || [],
     createdProducts: userData.createdProducts || [],
     orders: userData.orders || [],
     reviews: userData.reviews || [],
     localGroups: userData.localGroups || [],
-    // Domyślne wartości dla pozostałych pól
+    // Set default values for other fields
+    bio: userData.bio,
+    profileImage: userData.profileImage,
     isVerified: userData.isVerified !== undefined ? userData.isVerified : false,
-    createdAt: userData.createdAt ? (
-      // Jeśli createdAt to obiekt Firestore Timestamp, konwertuj go
-      typeof userData.createdAt === 'object' && 'toDate' in userData.createdAt 
-        ? userData.createdAt.toDate() 
-        : new Date(userData.createdAt)
-    ) : new Date(),
-    updatedAt: userData.updatedAt ? (
-      // Jeśli updatedAt to obiekt Firestore Timestamp, konwertuj go
-      typeof userData.updatedAt === 'object' && 'toDate' in userData.updatedAt 
-        ? userData.updatedAt.toDate() 
-        : new Date(userData.updatedAt)
-    ) : new Date()
-  } as User;
+    // Handle date conversion from Firebase Timestamp objects
+    createdAt: convertFirebaseTimestampToDate(userData.createdAt) || new Date(),
+    updatedAt: convertFirebaseTimestampToDate(userData.updatedAt) || new Date()
+  };
+
+  return normalizedUser;
 };
 
-// Interfejs stanu profilu użytkownika
+// Helper function to convert Firebase Timestamp to JavaScript Date
+const convertFirebaseTimestampToDate = (
+  timestamp: FirebaseTimestamp | Date | string | unknown
+): Date | null => {
+  if (!timestamp) return null;
+
+  try {
+    // If it's a Firebase Timestamp with toDate method
+    if (typeof timestamp === 'object' && timestamp !== null && 'toDate' in timestamp && typeof timestamp.toDate === 'function') {
+      return (timestamp as FirebaseTimestamp).toDate();
+    }
+    
+    // If it's already a Date
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    
+    // If it's a string or number, convert to Date
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      const date = new Date(timestamp);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+    
+    // Return current date as fallback
+    return new Date();
+  } catch (error) {
+    console.error('Error converting timestamp:', error);
+    return new Date();
+  }
+};
+
+// Interface for user profile state
 export interface UserProfileState {
   profile: User | null;
   isLoading: boolean;
   error: string | null;
 
-  // Metody zarządzania profilem
+  // Profile management methods
   fetchProfile: () => Promise<boolean>;
   fetchUserProfile: (userId: string) => Promise<User | null>;
   updateProfile: (userData: Partial<User>) => Promise<boolean>;
@@ -60,16 +91,16 @@ export interface UserProfileState {
   clearError: () => void;
 }
 
-// Utworzenie store z Zustand
+// Create store with Zustand
 export const useUserProfileStore = create<UserProfileState>()(
   persist(
-    (set, get) => ({
-      // Stan początkowy
+    (set) => ({
+      // Initial state
       profile: null,
       isLoading: false,
       error: null,
 
-      // Pobranie profilu zalogowanego użytkownika
+      // Fetch current user profile
       fetchProfile: async () => {
         set({ isLoading: true, error: null });
 
@@ -77,7 +108,7 @@ export const useUserProfileStore = create<UserProfileState>()(
           const response = await apiClient.get<FirebaseUserData>(API_ROUTES.USERS.ME);
 
           if (response.success && response.data) {
-            // Normalizuj dane użytkownika
+            // Normalize user data
             const normalizedUser = normalizeUserData(response.data);
             
             set({
@@ -101,7 +132,7 @@ export const useUserProfileStore = create<UserProfileState>()(
         }
       },
 
-      // Pobranie profilu innego użytkownika po ID
+      // Fetch another user's profile by ID
       fetchUserProfile: async (userId: string) => {
         set({ isLoading: true, error: null });
 
@@ -110,7 +141,7 @@ export const useUserProfileStore = create<UserProfileState>()(
 
           if (response.success && response.data) {
             set({ isLoading: false });
-            // Normalizuj dane użytkownika
+            // Normalize user data
             return normalizeUserData(response.data);
           } else {
             set({
@@ -128,7 +159,7 @@ export const useUserProfileStore = create<UserProfileState>()(
         }
       },
 
-      // Aktualizacja profilu użytkownika
+      // Update user profile
       updateProfile: async (userData: Partial<User>) => {
         set({ isLoading: true, error: null });
 
@@ -136,7 +167,7 @@ export const useUserProfileStore = create<UserProfileState>()(
           const response = await apiClient.put<FirebaseUserData>(API_ROUTES.USERS.ME, userData);
 
           if (response.success && response.data) {
-            // Normalizuj dane użytkownika
+            // Normalize user data
             const normalizedUser = normalizeUserData(response.data);
             
             set({
@@ -160,7 +191,7 @@ export const useUserProfileStore = create<UserProfileState>()(
         }
       },
 
-      // Upload zdjęcia profilowego
+      // Upload avatar
       uploadAvatar: async (file: File) => {
         set({ isLoading: true, error: null });
 
@@ -172,7 +203,7 @@ export const useUserProfileStore = create<UserProfileState>()(
           );
 
           if (response.success && response.data) {
-            // Normalizuj dane użytkownika
+            // Normalize user data
             const normalizedUser = normalizeUserData(response.data);
             
             set({
@@ -196,12 +227,12 @@ export const useUserProfileStore = create<UserProfileState>()(
         }
       },
 
-      // Czyszczenie błędu
+      // Clear error
       clearError: () => set({ error: null })
     }),
     {
       name: 'user-profile-storage',
-      // Przechowuj tylko profil w trwałym storage
+      // Only persist the profile in storage
       partialize: (state) => ({ profile: state.profile }),
     }
   )
