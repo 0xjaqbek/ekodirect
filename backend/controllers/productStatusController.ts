@@ -7,6 +7,49 @@ import { PRODUCT_STATUSES } from '../../src/shared/constants';
 const db = admin.firestore();
 const productsCollection = db.collection('products');
 
+// Define proper types for our data structures
+interface StatusHistoryItem {
+  status: string;
+  timestamp: admin.firestore.FieldValue | Date;
+  updatedBy: string;
+  note?: string;
+}
+
+interface UserData {
+  fullName: string;
+  location?: {
+    coordinates: [number, number];
+    address: string;
+    type?: string;
+  };
+  [key: string]: unknown; // For other properties we don't explicitly define
+}
+
+interface ProductData {
+  name: string;
+  status: string;
+  owner: string;
+  trackingId: string;
+  statusHistory?: StatusHistoryItem[];
+  harvestDate?: Date | admin.firestore.Timestamp;
+  location?: {
+    coordinates: [number, number];
+    address: string;
+    type?: string;
+  };
+  [key: string]: unknown; // For other properties we don't explicitly define
+}
+
+interface OwnerData {
+  _id: string;
+  fullName: string;
+  location?: {
+    coordinates: [number, number];
+    address: string;
+    type?: string;
+  };
+}
+
 /**
  * Update product status
  */
@@ -34,10 +77,16 @@ export const updateProductStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const product = productDoc.data();
+    const productData = productDoc.data() as ProductData | undefined;
+    if (!productData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Brak danych produktu.'
+      });
+    }
 
     // Check if user is the owner
-    if (product.owner !== userId) {
+    if (productData.owner !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do zmiany statusu tego produktu.'
@@ -45,14 +94,15 @@ export const updateProductStatus = async (req: Request, res: Response) => {
     }
 
     // Create status history item
-    const statusHistoryItem = {
+    const statusHistoryItem: StatusHistoryItem = {
       status,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       updatedBy: userId
     };
 
+    // Add note if provided
     if (note) {
-      statusHistoryItem['note'] = note;
+      statusHistoryItem.note = note;
     }
 
     // Update product in Firestore
@@ -64,9 +114,17 @@ export const updateProductStatus = async (req: Request, res: Response) => {
 
     // Get updated product
     const updatedProductDoc = await productsCollection.doc(id).get();
+    const updatedProductData = updatedProductDoc.data() as ProductData | undefined;
+    if (!updatedProductData) {
+      return res.status(500).json({
+        success: false,
+        error: 'Błąd podczas pobierania zaktualizowanego produktu.'
+      });
+    }
+
     const updatedProduct = {
       _id: updatedProductDoc.id,
-      ...updatedProductDoc.data()
+      ...updatedProductData
     };
 
     // Return updated product
@@ -100,22 +158,34 @@ export const getProductStatusHistory = async (req: Request, res: Response) => {
       });
     }
 
-    const product = productDoc.data();
+    const productData = productDoc.data() as ProductData | undefined;
+    if (!productData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Brak danych produktu.'
+      });
+    }
+
+    // Check if statusHistory exists and handle it safely
+    const statusHistory: StatusHistoryItem[] = productData.statusHistory || [];
 
     // Populate user data for each status history item
-    const statusHistory = await Promise.all(
-      product.statusHistory.map(async (item) => {
+    const populatedStatusHistory = await Promise.all(
+      statusHistory.map(async (item: StatusHistoryItem) => {
         // Get user who updated the status
         const userDoc = await db.collection('users').doc(item.updatedBy).get();
         
         if (userDoc.exists) {
-          return {
-            ...item,
-            updatedBy: {
-              _id: userDoc.id,
-              fullName: userDoc.data().fullName
-            }
-          };
+          const userData = userDoc.data() as UserData | undefined;
+          if (userData) {
+            return {
+              ...item,
+              updatedBy: {
+                _id: userDoc.id,
+                fullName: userData.fullName
+              }
+            };
+          }
         }
         
         return item;
@@ -125,7 +195,7 @@ export const getProductStatusHistory = async (req: Request, res: Response) => {
     // Return status history
     return res.json({
       success: true,
-      data: statusHistory
+      data: populatedStatusHistory
     });
   } catch (error) {
     console.error('Error getting product status history:', error);
@@ -157,35 +227,51 @@ export const getProductTracking = async (req: Request, res: Response) => {
     }
 
     const productDoc = productsSnapshot.docs[0];
-    const product = productDoc.data();
-
-    // Get owner data
-    const ownerDoc = await db.collection('users').doc(product.owner).get();
-    let owner = product.owner;
-    
-    if (ownerDoc.exists) {
-      const ownerData = ownerDoc.data();
-      owner = {
-        _id: ownerDoc.id,
-        fullName: ownerData.fullName,
-        location: ownerData.location
-      };
+    const productData = productDoc.data() as ProductData | undefined;
+    if (!productData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Brak danych produktu.'
+      });
     }
 
+    // Get owner data
+    let ownerData: string | OwnerData = productData.owner;
+    
+    if (typeof productData.owner === 'string') {
+      const ownerDoc = await db.collection('users').doc(productData.owner).get();
+      if (ownerDoc.exists) {
+        const userData = ownerDoc.data() as UserData | undefined;
+        if (userData) {
+          ownerData = {
+            _id: ownerDoc.id,
+            fullName: userData.fullName,
+            location: userData.location
+          };
+        }
+      }
+    }
+
+    // Safely access statusHistory
+    const statusHistory: StatusHistoryItem[] = productData.statusHistory || [];
+    
     // Populate user data for each status history item
-    const statusHistory = await Promise.all(
-      product.statusHistory.map(async (item) => {
+    const populatedStatusHistory = await Promise.all(
+      statusHistory.map(async (item: StatusHistoryItem) => {
         // Get user who updated the status
         const userDoc = await db.collection('users').doc(item.updatedBy).get();
         
         if (userDoc.exists) {
-          return {
-            ...item,
-            updatedBy: {
-              _id: userDoc.id,
-              fullName: userDoc.data().fullName
-            }
-          };
+          const userData = userDoc.data() as UserData | undefined;
+          if (userData) {
+            return {
+              ...item,
+              updatedBy: {
+                _id: userDoc.id,
+                fullName: userData.fullName
+              }
+            };
+          }
         }
         
         return item;
@@ -198,13 +284,13 @@ export const getProductTracking = async (req: Request, res: Response) => {
       data: {
         product: {
           _id: productDoc.id,
-          name: product.name,
-          status: product.status,
-          trackingId: product.trackingId,
-          statusHistory: statusHistory,
-          harvestDate: product.harvestDate,
-          owner: owner,
-          location: product.location
+          name: productData.name,
+          status: productData.status,
+          trackingId: productData.trackingId,
+          statusHistory: populatedStatusHistory,
+          harvestDate: productData.harvestDate,
+          owner: ownerData,
+          location: productData.location
         }
       }
     });

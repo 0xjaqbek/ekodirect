@@ -1,17 +1,18 @@
+// backend/tsconfig.json
 {
     "compilerOptions": {
       "target": "ES2020",
       "module": "CommonJS",
-      "rootDir": "./",
+      "rootDir": "../", // Change this to point to the project root
       "outDir": "./dist",
       "esModuleInterop": true,
       "strict": true,
       "skipLibCheck": true,
       "forceConsistentCasingInFileNames": true,
-       "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["src/shared/*"]
-    }
+      "baseUrl": "..",  // Set this to project root
+      "paths": {
+        "@shared/*": ["src/shared/*"]  // Add path mapping for shared
+      }
     },
     "include": ["**/*.ts"],
     "exclude": ["node_modules", "dist"]
