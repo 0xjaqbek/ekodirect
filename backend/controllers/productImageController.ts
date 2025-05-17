@@ -158,7 +158,7 @@ export const getProductById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).populate('owner');
 
     if (!product) {
       return res.status(404).json({
@@ -291,7 +291,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).populate('owner');
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -393,7 +393,7 @@ export const deleteProduct = async (req: Request, res: Response) => {
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).populate('owner');
     if (!product) {
       return res.status(404).json({
         success: false,

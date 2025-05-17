@@ -6,6 +6,30 @@ import { uploadImageToStorage } from '../services/fileStorageService';
 import { generateTrackingId, calculateDistance } from '../utils/productUtils';
 import { FirestoreProduct } from '../types';
 
+// Define a type for query filters
+type QueryFilter = {
+  status?: string;
+  category?: string;
+  subcategory?: string;
+  price?: {
+    $gte?: number;
+    $lte?: number;
+  };
+  owner?: string;
+  certificates?: {
+    $in: string[];
+  };
+  $or?: Array<{
+    [key: string]: {
+      $regex: string;
+      $options: string;
+    };
+  }>;
+};
+
+// Define a type for sort options
+type SortOptions = Record<string, 1 | -1>;
+
 /**
  * Get all products with filtering, sorting, and pagination
  */
@@ -28,8 +52,8 @@ export const getProducts = async (req: Request, res: Response) => {
       limit = 12
     } = req.query;
 
-    // Build query
-    let query: Record<string, any> = { status: 'available' };
+    // Build query as a single object
+    const query: QueryFilter = { status: 'available' };
 
     // Apply filters
     if (category) {
@@ -65,7 +89,7 @@ export const getProducts = async (req: Request, res: Response) => {
     }
 
     // Apply sorting
-    const sortOptions: Record<string, number> = {};
+    const sortOptions: SortOptions = {};
     switch (sortBy as string) {
       case 'price':
         sortOptions.price = sortOrder === 'asc' ? 1 : -1;
@@ -85,12 +109,11 @@ export const getProducts = async (req: Request, res: Response) => {
     // Apply pagination
     const skip = (Number(page) - 1) * Number(limit);
     
-    // Execute query
+    // Execute query with all parameters at once
     let products = await Product.find(query)
       .sort(sortOptions)
       .skip(skip)
       .limit(Number(limit))
-      .populate('owner')
       .exec();
 
     // Filter by location and calculate distance if coordinates provided
@@ -327,7 +350,23 @@ export const updateProduct = async (req: Request, res: Response) => {
     }
 
     // Update fields
-    const updateData: Record<string, any> = {
+    type UpdateData = {
+      updatedAt: Date;
+      name?: string;
+      description?: string;
+      price?: number;
+      quantity?: number;
+      unit?: string;
+      category?: string;
+      subcategory?: string;
+      harvestDate?: unknown;
+      location?: typeof location;
+      certificates?: string[];
+      isCertified?: boolean;
+      images?: string[];
+    };
+
+    const updateData: UpdateData = {
       updatedAt: new Date()
     };
     
@@ -451,11 +490,11 @@ export const getProductsByFarmer = async (req: Request, res: Response) => {
     }
 
     // Build query
-    let query: Record<string, any> = { owner: farmerId };
+    const query: Record<string, string> = { owner: farmerId };
 
     // Filter by status if provided
     if (status !== 'all') {
-      query.status = status;
+      query.status = status as string;
     }
 
     // Count total documents for pagination
