@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import { promisify } from 'util';
 import { admin } from '../firebase';
 import sharp from 'sharp';
+import os from 'os';
+
 
 const bucket = admin.storage().bucket();
 const writeFile = promisify(fs.writeFile);

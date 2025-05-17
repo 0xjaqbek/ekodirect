@@ -10,7 +10,7 @@ const JWT_SECRET = config.jwtSecret;
 declare global {
   namespace Express {
     interface Request {
-      user?: any;
+      user?: UserWithoutPassword & { id: string };
     }
   }
 }

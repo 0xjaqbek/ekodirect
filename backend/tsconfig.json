@@ -7,8 +7,12 @@
       "esModuleInterop": true,
       "strict": true,
       "skipLibCheck": true,
-      "forceConsistentCasingInFileNames": true
+      "forceConsistentCasingInFileNames": true,
+       "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    }
     },
-    "include": ["**/*.ts"],
+    "include": ["backend/**/*", "src/**/*"],
     "exclude": ["node_modules", "dist"]
   }

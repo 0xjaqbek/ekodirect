@@ -57,6 +57,5 @@ export interface UserWithoutPassword extends Omit<FirestoreUser, 'passwordHash'>
   id?: string;
 }
 
-export interface ProductWithOwner extends FirestoreProduct {
-  owner: string | UserWithoutPassword;
-}
+export type ProductWithOwner =
+  Omit<FirestoreProduct, 'owner'> & { owner: string | UserWithoutPassword };

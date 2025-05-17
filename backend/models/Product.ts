@@ -1,168 +1,72 @@
 // backend/models/Product.ts
-import mongoose from 'mongoose';
-import { PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../constants';
+import { firestore } from 'firebase-admin';
+import { z } from 'zod';
+import { PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../../src/shared/constants';
 
-const GeoSchema = new mongoose.Schema({
-  type: {
-    type: String,
-    default: 'Point'
-  },
-  coordinates: {
-    type: [Number], // [longitude, latitude]
-    required: true
-  },
-  address: {
-    type: String,
-    required: true
-  }
+const StatusEnum = ['available', 'preparing', 'shipped', 'delivered', 'unavailable'] as const;
+
+const StatusHistoryItemSchema = z.object({
+  status: z.string(),
+  timestamp: z.coerce.date().default(() => new Date()),
+  updatedBy: z.string(), // user ID
+  note: z.string().optional(),
 });
 
-const StatusHistoryItemSchema = new mongoose.Schema({
-  status: {
-    type: String,
-    required: true
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
-  },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  note: {
-    type: String
-  }
+const GeoSchema = z.object({
+  type: z.literal('Point'),
+  coordinates: z.tuple([z.number(), z.number()]), // [lon, lat]
+  address: z.string(),
 });
 
-const ProductSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-    minlength: 3,
-    maxlength: 100
-  },
-  description: {
-    type: String,
-    required: true,
-    minlength: 10,
-    maxlength: 2000
-  },
-  price: {
-    type: Number,
-    required: true,
-    min: 0.01
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 0,
-    default: 0
-  },
-  unit: {
-    type: String,
-    required: true,
-    enum: PRODUCT_UNITS
-  },
-  category: {
-    type: String,
-    required: true,
-    enum: PRODUCT_CATEGORIES
-  },
-  subcategory: {
-    type: String
-  },
-  owner: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  images: [{
-    type: String
-  }],
-  certificates: [{
-    type: String
-  }],
-  status: {
-    type: String,
-    enum: ['available', 'preparing', 'shipped', 'delivered', 'unavailable'],
-    default: 'available'
-  },
-  statusHistory: [StatusHistoryItemSchema],
-  location: {
-    type: GeoSchema
-  },
-  harvestDate: {
-    type: Date
-  },
-  trackingId: {
-    type: String,
-    unique: true
-  },
-  reviews: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Review'
-  }],
-  averageRating: {
-    type: Number,
-    default: 0,
-    min: 0,
-    max: 5
-  },
-  isCertified: {
-    type: Boolean,
-    default: false
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  }
+export const ProductSchema = z.object({
+  name: z.string().min(3).max(100),
+  description: z.string().min(10).max(2000),
+  price: z.number().min(0.01),
+  quantity: z.number().min(0).default(0),
+  unit: z.enum(PRODUCT_UNITS),
+  category: z.enum(PRODUCT_CATEGORIES),
+  subcategory: z.string().optional(),
+  owner: z.string(), // user ID
+  images: z.array(z.string()).default([]),
+  certificates: z.array(z.string()).default([]),
+  status: z.enum(StatusEnum).default('available'),
+  statusHistory: z.array(StatusHistoryItemSchema).default([]),
+  location: GeoSchema.optional(),
+  harvestDate: z.coerce.date().optional(),
+  trackingId: z.string().optional(),
+  reviews: z.array(z.string()).default([]), // array of review doc IDs
+  averageRating: z.number().min(0).max(5).default(0),
+  isCertified: z.boolean().default(false),
+  createdAt: z.coerce.date().default(() => new Date()),
+  updatedAt: z.coerce.date().default(() => new Date()),
 });
 
-// Create geospatial index on location field
-ProductSchema.index({ location: '2dsphere' });
+export type Product = z.infer<typeof ProductSchema>;
 
-// Create text index for search
-ProductSchema.index({ 
-  name: 'text', 
-  description: 'text', 
-  category: 'text', 
-  subcategory: 'text' 
-});
-
-// Pre-save middleware to update the updatedAt field
-ProductSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-// Method to check if product is available
-ProductSchema.methods.isAvailable = function() {
-  return this.status === 'available' && this.quantity > 0;
+export const productConverter: firestore.FirestoreDataConverter<Product> = {
+  toFirestore: (data: Product) => ({
+    ...data,
+    updatedAt: new Date(), // simulate pre-save hook
+  }),
+  fromFirestore: (snap) => {
+    const data = snap.data();
+    return ProductSchema.parse({
+      ...data,
+      createdAt: data.createdAt?.toDate?.() ?? new Date(),
+      updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+      harvestDate: data.harvestDate?.toDate?.(),
+      statusHistory: Array.isArray(data.statusHistory)
+        ? data.statusHistory.map((item) =>
+            StatusHistoryItemSchema.parse({
+              ...item,
+              timestamp: item.timestamp?.toDate?.() ?? new Date(),
+            })
+          )
+        : [],
+    });
+  },
 };
 
-// Method to update average rating
-ProductSchema.methods.updateAverageRating = async function() {
-  const Review = mongoose.model('Review');
-  
-  const result = await Review.aggregate([
-    { $match: { product: this._id } },
-    { $group: { _id: null, avgRating: { $avg: '$rating' } } }
-  ]);
-  
-  if (result.length > 0) {
-    this.averageRating = Math.round(result[0].avgRating * 10) / 10; // Round to 1 decimal
-  } else {
-    this.averageRating = 0;
-  }
-  
-  return this.save();
-};
-
-export const Product = mongoose.model('Product', ProductSchema);
+export const productsCol = firestore()
+  .collection('products')
+  .withConverter(productConverter);

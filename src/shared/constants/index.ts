@@ -12,7 +12,8 @@ export const PRODUCT_CATEGORIES = [
     'jaja',
     'napoje',
     'inne'
-  ];
+  ]as const;
+  export type ProductCategories = typeof PRODUCT_CATEGORIES[];
   
   export const PRODUCT_SUBCATEGORIES: Record<string, string[]> = {
     'warzywa': ['korzeniowe', 'liściaste', 'psiankowate', 'dyniowate', 'cebulowe', 'strączkowe', 'inne'],
@@ -28,7 +29,8 @@ export const PRODUCT_CATEGORIES = [
   };
   
   // Jednostki produktów
-  export const PRODUCT_UNITS = ['kg', 'g', 'szt', 'l', 'ml', 'opak'];
+  export const PRODUCT_UNITS = ['kg', 'g', 'szt', 'l', 'ml', 'opak']as const;
+  export type ProductUnit = typeof PRODUCT_UNITS[number];
   
   // Statusy zamówień
   export const ORDER_STATUSES = {
