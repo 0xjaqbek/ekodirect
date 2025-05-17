@@ -1,4 +1,4 @@
-// utils/geoUtils.ts
+// backend/utils/geoUtils.ts
 
 /**
  * Location interface with geographic coordinates
