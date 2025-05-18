@@ -1,89 +1,62 @@
-// backend/firebase.ts (Fixed with lazy initialization)
+// backend/firebase.ts - Synchronous initialization to fix the loading issue
 import admin from 'firebase-admin';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs';
 
 // Track initialization state
 let isInitialized = false;
-let initializationPromise: Promise<void> | null = null;
 
 // Simple approach that works with ts-node and CommonJS
-const currentDir = path.resolve(__dirname || process.cwd());
+const currentDir = path.resolve(__dirname);
 
-// Initialize Firebase
-async function initializeFirebase(): Promise<void> {
+// Initialize Firebase synchronously
+function initializeFirebase(): void {
   if (isInitialized) {
     return;
   }
 
-  if (initializationPromise) {
-    return initializationPromise;
-  }
-
-  initializationPromise = (async () => {
+  try {
+    // Read service account file path from env or use default
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || 
+                              path.join(currentDir, 'serviceAccountKey.json');
+    
+    let serviceAccount;
     try {
-      // Read service account file path from env or use default
-      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || 
-                                path.join(currentDir, 'serviceAccountKey.json');
-      
-      let serviceAccount;
-      try {
-        // Read and parse the service account JSON file
-        const fileContent = await fs.readFile(serviceAccountPath, 'utf8');
-        serviceAccount = JSON.parse(fileContent);
-      } catch (error) {
-        console.error('Error reading Firebase service account file:', error);
-        console.error('Expected path:', serviceAccountPath);
-        throw error;
-      }
-
-      // Initialize Firebase app with the service account
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: process.env.FIREBASE_DATABASE_URL,
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET
-      });
-
-      isInitialized = true;
-      console.log('Firebase initialized successfully');
+      // Read and parse the service account JSON file synchronously
+      const fileContent = fs.readFileSync(serviceAccountPath, 'utf8');
+      serviceAccount = JSON.parse(fileContent);
     } catch (error) {
-      console.error('Firebase initialization error:', error);
+      console.error('Error reading Firebase service account file:', error);
+      console.error('Expected path:', serviceAccountPath);
       throw error;
     }
-  })();
 
-  return initializationPromise;
+    // Initialize Firebase app with the service account
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL: process.env.FIREBASE_DATABASE_URL,
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET
+    });
+
+    isInitialized = true;
+    console.log('Firebase initialized successfully');
+  } catch (error) {
+    console.error('Firebase initialization error:', error);
+    throw error;
+  }
 }
 
-// Lazy getters for Firebase services
-export const getFirebaseAdmin = () => {
-  if (!isInitialized) {
-    throw new Error('Firebase not initialized. Make sure to await initializeFirebase() first.');
-  }
-  return admin;
-};
+// Initialize Firebase immediately when this module is imported
+initializeFirebase();
 
-export const getFirestore = () => {
-  if (!isInitialized) {
-    throw new Error('Firebase not initialized. Make sure to await initializeFirebase() first.');
-  }
-  return admin.firestore();
-};
+// Export the admin instance and services
+export { admin };
+export const db = admin.firestore();
+export const auth = admin.auth();
+export const storage = admin.storage();
 
-// Initialize Firebase immediately but don't export services until ready
-initializeFirebase().catch(error => {
-  console.error('Failed to initialize Firebase:', error);
-  process.exit(1);
-});
+// Export initialization function for manual initialization if needed
+export { initializeFirebase };
 
-// Export the initialization function and admin instance for backward compatibility
-export { admin, initializeFirebase };
-
-// Backward compatibility exports (lazy)
-export const db = new Proxy({} as FirebaseFirestore.Firestore, {
-  get(target, prop) {
-    const firestore = getFirestore();
-    const value = firestore[prop as keyof FirebaseFirestore.Firestore];
-    return typeof value === 'function' ? value.bind(firestore) : value;
-  }
-});
+// Export default admin instance for backward compatibility
+export default admin;

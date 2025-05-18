@@ -1,4 +1,4 @@
-// backend/server.ts - Complete server setup with all routes
+// backend/server.ts - Fixed error handling middleware
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -41,23 +41,34 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 
-// Global error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Define a custom error type for better type safety
+interface CustomError extends Error {
+  status?: number;
+  statusCode?: number;
+  code?: string;
+  stack?: string;
+}
+
+// Global error handling middleware - Fixed TypeScript error
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: CustomError, req: express.Request, res: express.Response, _next: express.NextFunction): void => {
   console.error('Global error handler:', err);
   
   // Handle Multer errors (file upload)
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       error: 'Plik jest za duży. Maksymalny rozmiar to 5MB.'
     });
+    return;
   }
   
   if (err.code === 'LIMIT_FILE_COUNT') {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       error: 'Za dużo plików. Maksymalna liczba plików to 5.'
     });
+    return;
   }
   
   // Handle other errors

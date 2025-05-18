@@ -1,8 +1,5 @@
-// backend/models/collections.ts
-import { admin } from '../firebase';
-
-// Get Firestore instance
-const db = admin.firestore();
+// backend/models/collections.ts - Fixed to use initialized Firebase
+import { db } from '../firebase';
 
 // Define collections with proper types
 export const usersCollection = db.collection('users');
