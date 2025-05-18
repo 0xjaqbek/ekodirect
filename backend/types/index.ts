@@ -1,4 +1,5 @@
-// backend/types/index.ts - Fixed with proper exports
+// backend/types/index.ts - Fixed with proper type separation
+
 import { admin } from '../firebase';
 
 // Re-export shared types from frontend
@@ -23,15 +24,52 @@ export interface ProductOwner {
   [key: string]: unknown; // Allow other properties
 }
 
-// Define StatusHistoryItem for Firestore
-export interface FirestoreStatusHistoryItem {
+// Define StatusHistoryItem for Firestore writes (with FieldValue)
+export interface FirestoreStatusHistoryItemWrite {
   status: string;
-  timestamp: admin.firestore.FieldValue | Date | admin.firestore.Timestamp;
+  timestamp: admin.firestore.FieldValue;
   updatedBy: string;
   note?: string;
 }
 
-// Define FirestoreProduct - backend-specific version that handles Firestore types
+// Define StatusHistoryItem for Firestore reads (with actual Timestamp/Date)
+export interface FirestoreStatusHistoryItem {
+  status: string;
+  timestamp: Date | admin.firestore.Timestamp;
+  updatedBy: string;
+  note?: string;
+}
+
+// Define FirestoreProduct for write operations (when creating/updating)
+export interface FirestoreProductWrite {
+  name: string;
+  description: string;
+  price: number;
+  quantity: number;
+  unit: string;
+  category: string;
+  subcategory?: string;
+  owner: string;
+  images: string[];
+  certificates?: string[];
+  status: 'available' | 'preparing' | 'shipped' | 'delivered' | 'unavailable';
+  statusHistory?: FirestoreStatusHistoryItemWrite[];
+  location?: {
+    type: string;
+    coordinates: [number, number];
+    address: string;
+  };
+  harvestDate?: Date;
+  trackingId?: string;
+  reviews?: string[];
+  averageRating: number;
+  isCertified: boolean;
+  // For write operations, these can be FieldValue (like serverTimestamp())
+  createdAt: admin.firestore.FieldValue;
+  updatedAt: admin.firestore.FieldValue;
+}
+
+// Define FirestoreProduct for read operations (when fetching from Firestore)
 export interface FirestoreProduct {
   _id: string;
   name: string;
@@ -57,11 +95,37 @@ export interface FirestoreProduct {
   averageRating: number;
   isCertified: boolean;
   distance?: number; // Added when filtering by location
-  createdAt: Date | admin.firestore.Timestamp | admin.firestore.FieldValue;
-  updatedAt: Date | admin.firestore.Timestamp | admin.firestore.FieldValue;
+  // For read operations, these are actual Timestamp/Date objects
+  createdAt: Date | admin.firestore.Timestamp;
+  updatedAt: Date | admin.firestore.Timestamp;
 }
 
-// Backend-specific User type that handles Firestore types
+// Backend-specific User type for write operations
+export interface FirestoreUserWrite {
+  email: string;
+  passwordHash: string;
+  fullName: string;
+  role: 'farmer' | 'consumer' | 'admin';
+  phoneNumber: string;
+  location: {
+    type: 'Point';
+    coordinates: [number, number];
+    address: string;
+  };
+  bio?: string;
+  profileImage?: string;
+  certificates?: string[];
+  createdProducts?: string[];
+  orders?: string[];
+  reviews?: string[];
+  localGroups?: string[];
+  isVerified: boolean;
+  lastLoginAt?: admin.firestore.FieldValue;
+  createdAt: admin.firestore.FieldValue;
+  updatedAt: admin.firestore.FieldValue;
+}
+
+// Backend-specific User type for read operations
 export interface FirestoreUser {
   _id: string;
   email: string;
@@ -83,8 +147,8 @@ export interface FirestoreUser {
   localGroups?: string[];
   isVerified: boolean;
   lastLoginAt?: admin.firestore.Timestamp | Date;
-  createdAt: admin.firestore.Timestamp | Date | admin.firestore.FieldValue;
-  updatedAt: admin.firestore.Timestamp | Date | admin.firestore.FieldValue;
+  createdAt: admin.firestore.Timestamp | Date;
+  updatedAt: admin.firestore.Timestamp | Date;
 }
 
 // Helper type guard to check if owner is populated

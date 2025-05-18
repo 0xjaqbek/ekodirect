@@ -1,8 +1,9 @@
-// Fixed version of backend/models/Product.ts
+// backend/models/Product.ts - Fixed with proper type handling
 
 import { admin } from '../firebase';
-import { FirestoreProduct, ProductOwner, FirestoreStatusHistoryItem } from '../types';
+import { FirestoreProduct, FirestoreProductWrite, ProductOwner, FirestoreStatusHistoryItem } from '../types';
 import { usersCollection } from './collections';
+import { convertToDate } from '../../src/shared/utils/firebase';
 
 const db = admin.firestore();
 const productsCollection = db.collection('products');
@@ -81,39 +82,39 @@ class ProductQueryBuilder {
 
     // Apply query filters
     Object.entries(this.query).forEach(([key, value]) => {
-        if (value === undefined) return;
-      
-        // Handle special query operators
-        if (key === 'price' && typeof value === 'object' && value !== null) {
-          // Type assertion to tell TypeScript this object might have these properties
-          const priceFilter = value as { $gte?: number; $lte?: number };
-          
-          if (priceFilter.$gte !== undefined) {
-            firestoreQuery = firestoreQuery.where('price', '>=', priceFilter.$gte);
-          }
-          if (priceFilter.$lte !== undefined) {
-            firestoreQuery = firestoreQuery.where('price', '<=', priceFilter.$lte);
-          }
-        } else if (key === 'certificates' && typeof value === 'object' && value !== null) {
-          // Type assertion for the certificates filter
-          const certFilter = value as { $in?: string[] };
-          
-          if (certFilter.$in && certFilter.$in.length > 0) {
-            // Firestore uses array-contains-any for this operation
-            firestoreQuery = firestoreQuery.where('certificates', 'array-contains-any', certFilter.$in);
-          }
-        } else if (key === 'status') {
-          firestoreQuery = firestoreQuery.where('status', '==', value);
-        } else if (key === 'owner') {
-          firestoreQuery = firestoreQuery.where('owner', '==', value);
-        } else if (key === 'category') {
-          firestoreQuery = firestoreQuery.where('category', '==', value);
-        } else if (key === 'subcategory') {
-          firestoreQuery = firestoreQuery.where('subcategory', '==', value);
-        } else if (key !== '$or') { // Skip $or for now - Firestore doesn't support it directly
-          firestoreQuery = firestoreQuery.where(key, '==', value);
+      if (value === undefined) return;
+    
+      // Handle special query operators
+      if (key === 'price' && typeof value === 'object' && value !== null) {
+        // Type assertion to tell TypeScript this object might have these properties
+        const priceFilter = value as { $gte?: number; $lte?: number };
+        
+        if (priceFilter.$gte !== undefined) {
+          firestoreQuery = firestoreQuery.where('price', '>=', priceFilter.$gte);
         }
-      });
+        if (priceFilter.$lte !== undefined) {
+          firestoreQuery = firestoreQuery.where('price', '<=', priceFilter.$lte);
+        }
+      } else if (key === 'certificates' && typeof value === 'object' && value !== null) {
+        // Type assertion for the certificates filter
+        const certFilter = value as { $in?: string[] };
+        
+        if (certFilter.$in && certFilter.$in.length > 0) {
+          // Firestore uses array-contains-any for this operation
+          firestoreQuery = firestoreQuery.where('certificates', 'array-contains-any', certFilter.$in);
+        }
+      } else if (key === 'status') {
+        firestoreQuery = firestoreQuery.where('status', '==', value);
+      } else if (key === 'owner') {
+        firestoreQuery = firestoreQuery.where('owner', '==', value);
+      } else if (key === 'category') {
+        firestoreQuery = firestoreQuery.where('category', '==', value);
+      } else if (key === 'subcategory') {
+        firestoreQuery = firestoreQuery.where('subcategory', '==', value);
+      } else if (key !== '$or') { // Skip $or for now - Firestore doesn't support it directly
+        firestoreQuery = firestoreQuery.where(key, '==', value);
+      }
+    });
 
     // Execute the query
     const snapshot = await firestoreQuery.get();
@@ -121,10 +122,30 @@ class ProductQueryBuilder {
 
     // Convert to array of products
     snapshot.forEach((doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => {
-      const product = {
+      const data = doc.data();
+      const product: FirestoreProduct = {
         _id: doc.id,
-        ...doc.data()
-      } as FirestoreProduct;
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        quantity: data.quantity,
+        unit: data.unit,
+        category: data.category,
+        subcategory: data.subcategory,
+        owner: data.owner,
+        images: data.images || [],
+        certificates: data.certificates || [],
+        status: data.status,
+        statusHistory: data.statusHistory,
+        location: data.location,
+        harvestDate: data.harvestDate,
+        trackingId: data.trackingId,
+        reviews: data.reviews || [],
+        averageRating: data.averageRating || 0,
+        isCertified: data.isCertified || false,
+        createdAt: data.createdAt, // This will be a Timestamp from Firestore
+        updatedAt: data.updatedAt
+      };
 
       // Handle text search ($or) in memory
       if (this.query.$or) {
@@ -132,9 +153,9 @@ class ProductQueryBuilder {
           const field = Object.keys(condition)[0];
           const value = condition[field];
           
-          if (value.$regex && product[field]) {
+          if (value.$regex && product[field as keyof FirestoreProduct]) {
             const regex = new RegExp(value.$regex, value.$options || '');
-            return regex.test(String(product[field]));
+            return regex.test(String(product[field as keyof FirestoreProduct]));
           }
           return false;
         });
@@ -147,28 +168,31 @@ class ProductQueryBuilder {
 
     // Apply sorting
     if (this.sortOpts !== null) {
-        results.sort((a, b) => {
-          for (const [field, direction] of Object.entries(this.sortOpts || {})) {
-            if (field === 'createdAt') {
-              const dateA = this.toJsDate(a.createdAt);
-              const dateB = this.toJsDate(b.createdAt);
-              
-              // Handle sort direction
-              if (direction === 1) {
-                return dateA.getTime() - dateB.getTime();
-              } else {
-                return dateB.getTime() - dateA.getTime();
-              }
-            }
+      results.sort((a, b) => {
+        for (const [field, direction] of Object.entries(this.sortOpts || {})) {
+          if (field === 'createdAt') {
+            const dateA = convertToDate(a.createdAt) || new Date();
+            const dateB = convertToDate(b.createdAt) || new Date();
             
-            // Handle normal field sorting
-            if (a[field] < b[field]) return -1 * direction;
-            if (a[field] > b[field]) return 1 * direction;
+            // Handle sort direction
+            if (direction === 1) {
+              return dateA.getTime() - dateB.getTime();
+            } else {
+              return dateB.getTime() - dateA.getTime();
+            }
           }
           
-          return 0;
-        });
-      }
+          // Handle normal field sorting
+          const aValue = a[field as keyof FirestoreProduct];
+          const bValue = b[field as keyof FirestoreProduct];
+          
+          if (aValue < bValue) return -1 * direction;
+          if (aValue > bValue) return 1 * direction;
+        }
+        
+        return 0;
+      });
+    }
 
     // Apply pagination
     if (this.skipValue > 0) {
@@ -185,31 +209,6 @@ class ProductQueryBuilder {
     }
 
     return results;
-  }
-
-  /**
-   * Helper method to convert FirestoreTimestamp or any date-like value to JavaScript Date
-   */
-  private toJsDate(value: Date | admin.firestore.Timestamp | string | number | undefined): Date {
-    if (!value) return new Date();
-    
-    // Handle Firebase Timestamp objects with type checking
-    if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-      return (value as admin.firestore.Timestamp).toDate();
-    }
-    
-    // Handle Date objects
-    if (value instanceof Date) {
-      return value;
-    }
-    
-    // Handle string or number by creating a new Date
-    if (typeof value === 'string' || typeof value === 'number') {
-      return new Date(value);
-    }
-    
-    // Default case - return current date
-    return new Date();
   }
 
   // Helper method to populate owner references
@@ -262,7 +261,7 @@ export class Product {
   owner: string;
   images: string[] = [];
   certificates?: string[];
-  status: string;
+  status: 'available' | 'preparing' | 'shipped' | 'delivered' | 'unavailable';
   statusHistory?: FirestoreStatusHistoryItem[];
   location?: {
     type: string;
@@ -303,10 +302,30 @@ export class Product {
       return null;
     }
     
+    const data = doc.data()!;
     return {
       _id: doc.id,
-      ...doc.data()
-    } as FirestoreProduct;
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      quantity: data.quantity,
+      unit: data.unit,
+      category: data.category,
+      subcategory: data.subcategory,
+      owner: data.owner,
+      images: data.images || [],
+      certificates: data.certificates || [],
+      status: data.status,
+      statusHistory: data.statusHistory,
+      location: data.location,
+      harvestDate: data.harvestDate,
+      trackingId: data.trackingId,
+      reviews: data.reviews || [],
+      averageRating: data.averageRating || 0,
+      isCertified: data.isCertified || false,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt
+    };
   }
 
   /**
@@ -339,10 +358,7 @@ export class Product {
       return null;
     }
     
-    return {
-      _id: updated.id,
-      ...updated.data()
-    } as FirestoreProduct;
+    return this.findById(id);
   }
 
   /**
@@ -365,20 +381,20 @@ export class Product {
     if (data.statusHistory) {
       this.statusHistory = data.statusHistory.map(item => ({
         ...item,
-        timestamp: this.convertToDate(item.timestamp)
+        timestamp: convertToDate(item.timestamp) || new Date()
       }));
     } else {
       this.statusHistory = [];
     }
     
     this.location = data.location;
-    this.harvestDate = this.convertToDate(data.harvestDate);
+    this.harvestDate = convertToDate(data.harvestDate) || undefined;
     this.trackingId = data.trackingId;
     this.reviews = data.reviews || [];
     this.averageRating = data.averageRating || 0;
     this.isCertified = data.isCertified || false;
-    this.createdAt = this.convertToDate(data.createdAt) || new Date();
-    this.updatedAt = this.convertToDate(data.updatedAt) || new Date();
+    this.createdAt = convertToDate(data.createdAt) || new Date();
+    this.updatedAt = convertToDate(data.updatedAt) || new Date();
     
     // Avoid using unassigned property (but capture it for completeness)
     if (data._id) {
@@ -387,37 +403,10 @@ export class Product {
   }
 
   /**
-   * Helper to convert FirestoreTimestamp or string to Date
-   */
-  private convertToDate(value: unknown): Date {
-    if (!value) return new Date();
-    
-    // Handle Firebase Timestamp objects
-    if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-      return value.toDate();
-    }
-    
-    // Handle Date objects
-    if (value instanceof Date) {
-      return value;
-    }
-    
-    // Handle string or number dates
-    if (typeof value === 'string' || typeof value === 'number') {
-      const date = new Date(value);
-      if (!isNaN(date.getTime())) {
-        return date;
-      }
-    }
-    
-    return new Date();
-  }
-
-  /**
    * Save the product to Firestore
    */
   async save(): Promise<FirestoreProduct> {
-    // Convert to plain object for Firestore
+    // Convert to Firestore-friendly object
     const productData = this.toFirestore();
     const docId = this._id;  // Store the ID in a local variable to avoid the unused warning
     
@@ -428,7 +417,9 @@ export class Product {
       // Return as FirestoreProduct
       return {
         _id: docId,
-        ...productData
+        ...productData,
+        createdAt: this.createdAt,
+        updatedAt: this.updatedAt
       } as FirestoreProduct;
     }
     
@@ -439,16 +430,18 @@ export class Product {
     // Return as FirestoreProduct
     return {
       _id: this._id,
-      ...productData
+      ...productData,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt
     } as FirestoreProduct;
   }
 
   /**
    * Convert to Firestore-friendly object (without methods)
    */
-  private toFirestore(): Record<string, unknown> {
+  private toFirestore(): Omit<FirestoreProductWrite, 'createdAt' | 'updatedAt'> {
     // Create a fresh object to avoid the unused _id property warning
-    const result: Record<string, unknown> = {
+    const result: Omit<FirestoreProductWrite, 'createdAt' | 'updatedAt'> = {
       name: this.name,
       description: this.description,
       price: this.price,
@@ -459,15 +452,19 @@ export class Product {
       images: this.images,
       status: this.status,
       averageRating: this.averageRating,
-      isCertified: this.isCertified,
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt
+      isCertified: this.isCertified
     };
     
     // Add optional properties only if they exist
     if (this.subcategory) result.subcategory = this.subcategory;
     if (this.certificates) result.certificates = this.certificates;
-    if (this.statusHistory) result.statusHistory = this.statusHistory;
+    if (this.statusHistory) {
+      // Convert back to write format
+      result.statusHistory = this.statusHistory.map(item => ({
+        ...item,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      }));
+    }
     if (this.location) result.location = this.location;
     if (this.harvestDate) result.harvestDate = this.harvestDate;
     if (this.trackingId) result.trackingId = this.trackingId;
