@@ -15,10 +15,11 @@
         "@shared/*": ["../src/shared/*"]
       }
     },
-    "include": ["**/*.ts"],
+    "include": ["**/*.ts", "server.mts"],
     "exclude": ["node_modules", "dist"],
     "ts-node": {
       "esm": true,
       "experimentalSpecifierResolution": "node"
     }
   }
+  

@@ -39,6 +39,7 @@ app.get('/', (req, res) => {
 // API Routes with /api prefix
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+console.log('Mounting /api/products...');
 app.use('/api/products', productRoutes);
 
 // Define a custom error type for better type safety
