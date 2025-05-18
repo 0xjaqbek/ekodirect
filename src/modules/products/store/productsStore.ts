@@ -1,7 +1,7 @@
-// src/modules/products/store/productsStore.ts
+// src/modules/products/store/productsStore.ts - Fixed type conversion
 import { create } from 'zustand';
-import { type Product, type ProductFilterParams, type ApiResponse } from '../../../shared/types';
-import apiClient from '../../../shared/api';
+import { type Product, type ProductFilterParams} from '../../../shared/types';
+import apiClient, { type RequestParams } from '../../../shared/api';
 import { API_ROUTES } from '../../../shared/constants';
 
 // Interface for the products state
@@ -34,6 +34,30 @@ const defaultFilters: ProductFilterParams = {
   sortOrder: 'desc'
 };
 
+// Helper function to convert ProductFilterParams to RequestParams
+function convertFiltersToRequestParams(filters: ProductFilterParams): RequestParams {
+  const params: RequestParams = {};
+  
+  // Convert all properties to compatible types
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      // Handle location array specially - convert to separate lat/lng params
+      if (key === 'location' && Array.isArray(value) && value.length === 2) {
+        params.lat = value[1]; // latitude
+        params.lng = value[0]; // longitude
+      } else if (Array.isArray(value)) {
+        // Handle other arrays by joining them
+        params[key] = value.join(',');
+      } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        // Handle primitive types
+        params[key] = value;
+      }
+    }
+  });
+  
+  return params;
+}
+
 // Create the products store with Zustand
 export const useProductsStore = create<ProductsState>((set, get) => ({
   // Initial state
@@ -56,6 +80,9 @@ export const useProductsStore = create<ProductsState>((set, get) => ({
       // Update filters in state
       set({ filters: updatedFilters });
       
+      // Convert filters to RequestParams format
+      const requestParams = convertFiltersToRequestParams(updatedFilters);
+      
       // Make API request
       const response = await apiClient.get<{
         items: Product[];
@@ -63,7 +90,7 @@ export const useProductsStore = create<ProductsState>((set, get) => ({
         page: number;
         limit: number;
         totalPages: number;
-      }>(API_ROUTES.PRODUCTS.LIST, updatedFilters);
+      }>(API_ROUTES.PRODUCTS.LIST, requestParams);
       
       if (response.success && response.data) {
         set({
