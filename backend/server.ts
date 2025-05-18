@@ -8,7 +8,7 @@ import './firebase';
 
 // Import routes
 import authRoutes from './routes/auth';
-import userRoutes from './routes/users';
+import userRoutes from './routes/users'; // This will now correctly import users.ts
 import productRoutes from './routes/products';
 
 // Initialize environment variables
