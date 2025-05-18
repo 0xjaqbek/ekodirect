@@ -1,8 +1,39 @@
-// backend/services/profileService.js
-import { admin } from '../firebase.js';
+// backend/services/profileService.ts - Fixed TypeScript version
+import { admin } from '../firebase';
 
 const db = admin.firestore();
 const usersCollection = db.collection('users');
+
+// Define types for better type safety
+interface UserProfileData {
+  id: string;
+  email: string;
+  fullName: string;
+  role: 'farmer' | 'consumer' | 'admin';
+  phoneNumber: string;
+  bio?: string;
+  profileImage?: string;
+  location?: {
+    type?: string;
+    coordinates?: [number, number];
+    address?: string;
+  };
+  certificates?: string[];
+  createdProducts?: string[];
+  orders?: string[];
+  reviews?: string[];
+  localGroups?: string[];
+  isVerified?: boolean;
+  lastLoginAt?: admin.firestore.Timestamp;
+  createdAt?: admin.firestore.Timestamp;
+  updatedAt?: admin.firestore.Timestamp;
+  [key: string]: unknown;
+}
+
+interface FarmerWithDistance extends Omit<UserProfileData, 'id'> {
+  id: string;
+  distance: number;
+}
 
 /**
  * Serwis do zarządzania profilami użytkowników
@@ -11,7 +42,7 @@ class ProfileService {
   /**
    * Pobierz profil użytkownika
    */
-  async getUserProfile(userId) {
+  async getUserProfile(userId: string): Promise<UserProfileData | null> {
     const userDoc = await usersCollection.doc(userId).get();
     
     if (!userDoc.exists) {
@@ -19,27 +50,34 @@ class ProfileService {
     }
     
     const userData = userDoc.data();
-    const { passwordHash, ...userWithoutPassword } = userData;
+    if (!userData) {
+      return null;
+    }
+    
+    // Remove sensitive data - use explicit destructuring with renamed unused variable
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _passwordHash, ...userWithoutPassword } = userData;
     
     return {
       id: userDoc.id,
       ...userWithoutPassword
-    };
+    } as UserProfileData;
   }
   
   /**
    * Zaktualizuj profil użytkownika
    */
-  async updateUserProfile(userId, userData) {
-    // Usuń pola, których nie chcemy aktualizować
-    const { passwordHash, email, role, isVerified, ...updateData } = userData;
+  async updateUserProfile(userId: string, userData: Partial<UserProfileData>): Promise<UserProfileData | null> {
+    // Remove fields we don't want to update - use explicit destructuring with renamed unused variables
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _passwordHash, email: _email, role: _role, isVerified: _isVerified, ...updateData } = userData;
     
     await usersCollection.doc(userId).update({
       ...updateData,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Pobierz zaktualizowane dane
+    // Get updated data
     return await this.getUserProfile(userId);
   }
   
@@ -48,8 +86,8 @@ class ProfileService {
    * Uwaga: Firebase Firestore nie obsługuje natywnie zapytań geoprzestrzennych
    * W rzeczywistym projekcie użylibyśmy Firebase GeoFirestore lub innej bazy obsługującej geoprzestrzenne zapytania
    */
-  async getFarmersNearLocation(coordinates, maxDistance = 50) {
-    // Pobierz wszystkich rolników
+  async getFarmersNearLocation(coordinates: [number, number], maxDistance: number = 50): Promise<FarmerWithDistance[]> {
+    // Get all farmers
     const farmersSnapshot = await usersCollection
       .where('role', '==', 'farmer')
       .get();
@@ -58,9 +96,9 @@ class ProfileService {
       return [];
     }
     
-    // Funkcja do obliczania odległości (Haversine formula)
-    const calculateDistance = (lat1, lon1, lat2, lon2) => {
-      const R = 6371; // Promień Ziemi w km
+    // Function to calculate distance (Haversine formula)
+    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371; // Earth radius in km
       const dLat = this.deg2rad(lat2 - lat1);
       const dLon = this.deg2rad(lon2 - lon1);
       const a = 
@@ -68,11 +106,11 @@ class ProfileService {
         Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) * 
         Math.sin(dLon/2) * Math.sin(dLon/2); 
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-      return R * c; // Odległość w km
+      return R * c; // Distance in km
     };
     
-    // Filtruj rolników według odległości
-    const farmersNearby = [];
+    // Filter farmers by distance
+    const farmersNearby: FarmerWithDistance[] = [];
     
     farmersSnapshot.forEach(doc => {
       const farmer = doc.data();
@@ -86,24 +124,26 @@ class ProfileService {
         );
         
         if (distance <= maxDistance) {
-          const { passwordHash, ...farmerWithoutPassword } = farmer;
+          // Remove sensitive data - use explicit destructuring with renamed unused variable
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { passwordHash: _passwordHash, ...farmerWithoutPassword } = farmer;
           farmersNearby.push({
             id: doc.id,
             ...farmerWithoutPassword,
-            distance // Dodaj odległość do wyniku
-          });
+            distance // Add distance to result
+          } as FarmerWithDistance);
         }
       }
     });
     
-    // Sortuj według odległości
+    // Sort by distance
     return farmersNearby.sort((a, b) => a.distance - b.distance);
   }
   
   /**
-   * Konwersja stopni na radiany
+   * Convert degrees to radians
    */
-  deg2rad(deg) {
+  private deg2rad(deg: number): number {
     return deg * (Math.PI/180);
   }
 }

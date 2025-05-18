@@ -1,9 +1,23 @@
-// backend/services/verificationService.js
-import { admin } from '../firebase.js';
+// backend/services/verificationService.ts - Fixed TypeScript version
+import { admin } from '../firebase';
 
 const db = admin.firestore();
-const usersCollection = db.collection('users');
 const certificatesCollection = db.collection('certificates');
+
+// Define types for certificates
+interface Certificate {
+  id: string;
+  name: string;
+  type: 'organic' | 'eco' | 'fair-trade' | 'other';
+  issuingAuthority: string;
+  documentUrl?: string;
+  issuedTo: string;
+  products?: string[];
+  isVerified: boolean;
+  validUntil: admin.firestore.Timestamp | Date;
+  createdAt: admin.firestore.Timestamp | Date;
+  updatedAt: admin.firestore.Timestamp | Date;
+}
 
 /**
  * Serwis do weryfikacji rolników i certyfikatów
@@ -12,22 +26,27 @@ class VerificationService {
   /**
    * Zweryfikuj certyfikat rolnika
    */
-  async verifyCertificate(certificateId, isVerified) {
+  async verifyCertificate(certificateId: string, isVerified: boolean): Promise<Certificate | null> {
     await certificatesCollection.doc(certificateId).update({
       isVerified,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    return await certificatesCollection.doc(certificateId).get().then(doc => {
-      if (!doc.exists) return null;
-      return { id: doc.id, ...doc.data() };
-    });
+    const doc = await certificatesCollection.doc(certificateId).get();
+    if (!doc.exists) {
+      return null;
+    }
+    
+    return { 
+      id: doc.id, 
+      ...doc.data() 
+    } as Certificate;
   }
   
   /**
    * Pobierz certyfikaty rolnika
    */
-  async getFarmerCertificates(userId) {
+  async getFarmerCertificates(userId: string): Promise<Certificate[]> {
     const certificatesSnapshot = await certificatesCollection
       .where('issuedTo', '==', userId)
       .get();
@@ -36,9 +55,12 @@ class VerificationService {
       return [];
     }
     
-    const certificates = [];
+    const certificates: Certificate[] = [];
     certificatesSnapshot.forEach(doc => {
-      certificates.push({ id: doc.id, ...doc.data() });
+      certificates.push({ 
+        id: doc.id, 
+        ...doc.data() 
+      } as Certificate);
     });
     
     return certificates;
@@ -47,7 +69,7 @@ class VerificationService {
   /**
    * Sprawdź czy rolnik posiada zweryfikowane certyfikaty
    */
-  async hasFarmerVerifiedCertificates(userId) {
+  async hasFarmerVerifiedCertificates(userId: string): Promise<boolean> {
     const certificatesSnapshot = await certificatesCollection
       .where('issuedTo', '==', userId)
       .where('isVerified', '==', true)
