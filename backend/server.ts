@@ -1,5 +1,5 @@
-// backend/server.ts - Complete server setup with all routes
-import express from 'express';
+// backend/server.ts - Complete server setup with fixed error handling
+import express, { type ErrorRequestHandler } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
@@ -41,23 +41,26 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 
-// Global error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Global error handling middleware - properly typed
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   console.error('Global error handler:', err);
   
   // Handle Multer errors (file upload)
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       error: 'Plik jest za duży. Maksymalny rozmiar to 5MB.'
     });
+    return;
   }
   
   if (err.code === 'LIMIT_FILE_COUNT') {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       error: 'Za dużo plików. Maksymalna liczba plików to 5.'
     });
+    return;
   }
   
   // Handle other errors
@@ -69,7 +72,10 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     error: message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
-});
+};
+
+// Apply the error handler
+app.use(errorHandler);
 
 // Handle 404 for undefined routes
 app.use('*', (req: express.Request, res: express.Response) => {
