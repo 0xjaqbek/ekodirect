@@ -21,6 +21,14 @@ export const productExists = async (req: Request, res: Response, next: NextFunct
   try {
     const { id } = req.params;
     
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        error: 'Product ID is required'
+      });
+      return;
+    }
+    
     // Check if product exists
     const productDoc = await productsCollection.doc(id).get();
     
@@ -139,11 +147,11 @@ export const validateProductData = (req: Request, res: Response, next: NextFunct
     }
     
     // Quantity validation
-    const quantityNumber = parseInt(quantity, 10);
+    const quantityNumber = parseFloat(quantity);
     if (isNaN(quantityNumber) || quantityNumber <= 0) {
       res.status(400).json({
         success: false,
-        error: 'Ilość musi być liczbą całkowitą dodatnią'
+        error: 'Ilość musi być liczbą dodatnią'
       });
       return;
     }

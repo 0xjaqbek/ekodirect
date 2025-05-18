@@ -1,4 +1,4 @@
-// backend/server.mts - Debug version
+// backend/server.mts - Fixed version with better error handling
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -36,102 +36,123 @@ app.get('/test', (req, res) => {
   res.json({ message: 'Test route works' });
 });
 
-// Try importing routes one by one to identify the problematic one
-try {
-  console.log('Importing auth routes...');
-  const authRoutes = await import('./routes/auth.js');
-  app.use('/api/auth', authRoutes.default);
-  console.log('Auth routes loaded successfully');
-} catch (error) {
-  console.error('Error loading auth routes:', error);
-}
-
-try {
-  console.log('Importing user routes...');
-  const userRoutes = await import('./routes/users.js');
-  app.use('/api/users', userRoutes.default);
-  console.log('User routes loaded successfully');
-} catch (error) {
-  console.error('Error loading user routes:', error);
-}
-
-try {
-  console.log('Importing product routes...');
-  const productRoutes = await import('./routes/products.js');
-  app.use('/api/products', productRoutes.default);
-  console.log('Product routes loaded successfully');
-} catch (error) {
-  console.error('Error loading product routes:', error);
-}
-
-// Custom error interface
-interface CustomError extends Error {
-  status?: number;
-  statusCode?: number;
-  code?: string;
-}
-
-// Global error handling middleware
-app.use((err: CustomError, req: express.Request, res: express.Response, next: express.NextFunction): void => {
-  console.error('Global error handler:', err);
-  
-  // Handle Multer errors (file upload)
-  if (err.code === 'LIMIT_FILE_SIZE') {
-    res.status(400).json({
-      success: false,
-      error: 'Plik jest za duży. Maksymalny rozmiar to 5MB.'
-    });
-    return;
+// Import and setup routes with better error handling
+async function setupRoutes() {
+  try {
+    console.log('Importing auth routes...');
+    const authRoutes = await import('./routes/auth.js');
+    app.use('/api/auth', authRoutes.default);
+    console.log('Auth routes loaded successfully');
+  } catch (error) {
+    console.error('Error loading auth routes:', error);
+    process.exit(1);
   }
-  
-  if (err.code === 'LIMIT_FILE_COUNT') {
-    res.status(400).json({
-      success: false,
-      error: 'Za dużo plików. Maksymalna liczba plików to 5.'
-    });
-    return;
+
+  try {
+    console.log('Importing user routes...');
+    const userRoutes = await import('./routes/users.js');
+    app.use('/api/users', userRoutes.default);
+    console.log('User routes loaded successfully');
+  } catch (error) {
+    console.error('Error loading user routes:', error);
+    process.exit(1);
   }
-  
-  // Handle other errors
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || 'Wystąpił błąd serwera';
-  
-  res.status(status).json({
-    success: false,
-    error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
 
-// Handle 404 for undefined routes
-app.use('*', (req: express.Request, res: express.Response) => {
-  res.status(404).json({
-    success: false,
-    error: `Route ${req.originalUrl} not found`,
-    availableRoutes: [
-      'GET /',
-      'GET /test',
-      'POST /api/auth/register',
-      'POST /api/auth/login',
-      'POST /api/auth/refresh-token',
-      'POST /api/auth/verify-email',
-      'GET /api/users/me',
-      'GET /api/products'
-    ]
-  });
-});
+  try {
+    console.log('Importing product routes...');
+    const productRoutes = await import('./routes/products.js');
+    
+    // Validate that productRoutes.default is a valid router
+    if (!productRoutes.default || typeof productRoutes.default !== 'function') {
+      throw new Error('Product routes export is not a valid Express router');
+    }
+    
+    app.use('/api/products', productRoutes.default);
+    console.log('Product routes loaded successfully');
+  } catch (error) {
+    console.error('Error loading product routes:', error);
+    console.error('Full error details:', error);
+    process.exit(1);
+  }
+}
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 API available at http://localhost:${PORT}/api`);
-  console.log(`🌟 Health check: http://localhost:${PORT}/`);
-  console.log(`🔥 Environment: ${process.env.NODE_ENV || 'development'}`);
+// Setup routes
+setupRoutes().then(() => {
+  console.log('All routes loaded successfully');
+  
+  // Custom error interface
+  interface CustomError extends Error {
+    status?: number;
+    statusCode?: number;
+    code?: string;
+  }
+
+  // Global error handling middleware
+  app.use((err: CustomError, req: express.Request, res: express.Response, next: express.NextFunction): void => {
+    console.error('Global error handler:', err);
+    
+    // Handle Multer errors (file upload)
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res.status(400).json({
+        success: false,
+        error: 'Plik jest za duży. Maksymalny rozmiar to 5MB.'
+      });
+      return;
+    }
+    
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      res.status(400).json({
+        success: false,
+        error: 'Za dużo plików. Maksymalna liczba plików to 5.'
+      });
+      return;
+    }
+    
+    // Handle other errors
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || 'Wystąpił błąd serwera';
+    
+    res.status(status).json({
+      success: false,
+      error: message,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    });
+  });
+
+  // Handle 404 for undefined routes
+  app.use('*', (req: express.Request, res: express.Response) => {
+    res.status(404).json({
+      success: false,
+      error: `Route ${req.originalUrl} not found`,
+      availableRoutes: [
+        'GET /',
+        'GET /test',
+        'POST /api/auth/register',
+        'POST /api/auth/login',
+        'POST /api/auth/refresh-token',
+        'POST /api/auth/verify-email',
+        'GET /api/users/me',
+        'GET /api/products'
+      ]
+    });
+  });
+
+  // Start the server
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📡 API available at http://localhost:${PORT}/api`);
+    console.log(`🌟 Health check: http://localhost:${PORT}/`);
+    console.log(`🔥 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}).catch((error) => {
+  console.error('Failed to setup routes:', error);
+  process.exit(1);
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
 
 // Handle uncaught exceptions

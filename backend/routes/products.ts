@@ -1,4 +1,4 @@
-// backend/routes/products.ts - Fixed version with correct imports
+// backend/routes/products.ts - Fixed version
 import express from 'express';
 import multer from 'multer';
 import { authenticateUser } from '../middleware/auth';
@@ -51,6 +51,8 @@ const upload = multer({
   }
 });
 
+// Define routes in a specific order to avoid conflicts
+
 /**
  * Get all products with filtering
  * @route GET /api/products
@@ -72,6 +74,8 @@ router.post(
   createProduct
 );
 
+// Specific routes (should come before parameterized routes)
+
 /**
  * Get products by farmer
  * @route GET /api/products/farmer/:farmerId
@@ -85,6 +89,8 @@ router.get('/farmer/:farmerId', getProductsByFarmer);
  * @access Public
  */
 router.get('/tracking/:trackingId', getProductTracking);
+
+// Parameterized routes (should come after specific routes)
 
 /**
  * Get a single product
@@ -121,6 +127,8 @@ router.delete(
   isProductOwner,
   deleteProduct
 );
+
+// Image management routes
 
 /**
  * Upload product images
@@ -162,6 +170,8 @@ router.put(
   isProductOwner,
   setMainProductImage
 );
+
+// Status management routes
 
 /**
  * Update product status
