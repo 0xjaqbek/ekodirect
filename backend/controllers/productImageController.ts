@@ -1,4 +1,4 @@
-// backend/controllers/productImageController.ts
+// backend/controllers/productImageController.ts - Fixed version
 import { Request, Response } from 'express';
 import { admin } from '../firebase';
 import { VALIDATION } from '../../src/shared/constants';
@@ -14,22 +14,23 @@ const bucket = admin.storage().bucket();
 interface ProductData {
   owner: string;
   images: string[];
-  [key: string]: unknown; // For other properties
+  [key: string]: unknown;
 }
 
 /**
  * Upload product images
  */
-export const uploadProductImages = async (req: Request, res: Response) => {
+export const uploadProductImages = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     
     // Add null check before accessing req.user
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
     const userId = req.user.id;
 
@@ -37,46 +38,51 @@ export const uploadProductImages = async (req: Request, res: Response) => {
     const productDoc = await productsCollection.doc(id).get();
     
     if (!productDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
+      return;
     }
 
     const product = productDoc.data() as ProductData | undefined;
     
     // Add null check for product
     if (!product) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Brak danych produktu.'
       });
+      return;
     }
 
     // Check if user is the owner
     if (product.owner !== userId) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
       });
+      return;
     }
 
     // Get uploaded files
     const images = req.files as Express.Multer.File[];
     
     if (!images || images.length === 0) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Nie przesłano żadnych zdjęć.'
       });
+      return;
     }
 
     // Check if max images limit reached
     if (product.images.length + images.length > VALIDATION.MAX_IMAGES_PER_PRODUCT) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: `Przekroczono maksymalną liczbę zdjęć (${VALIDATION.MAX_IMAGES_PER_PRODUCT}).`
       });
+      return;
     }
 
     // Upload images to Firebase Storage
@@ -127,7 +133,7 @@ export const uploadProductImages = async (req: Request, res: Response) => {
     });
 
     // Return updated image URLs
-    return res.json({
+    res.json({
       success: true,
       data: {
         imageUrls: updatedImages
@@ -135,7 +141,7 @@ export const uploadProductImages = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error uploading product images:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas przesyłania zdjęć.'
     });
@@ -145,16 +151,17 @@ export const uploadProductImages = async (req: Request, res: Response) => {
 /**
  * Remove product image
  */
-export const removeProductImage = async (req: Request, res: Response) => {
+export const removeProductImage = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id, imageIndex } = req.params;
     
     // Add null check before accessing req.user
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
     const userId = req.user.id;
 
@@ -162,38 +169,42 @@ export const removeProductImage = async (req: Request, res: Response) => {
     const productDoc = await productsCollection.doc(id).get();
     
     if (!productDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
+      return;
     }
 
     const product = productDoc.data() as ProductData | undefined;
     
     // Add null check for product
     if (!product) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Brak danych produktu.'
       });
+      return;
     }
 
     // Check if user is the owner
     if (product.owner !== userId) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
       });
+      return;
     }
 
     // Check if image index is valid
     const index = parseInt(imageIndex, 10);
     
     if (isNaN(index) || index < 0 || index >= product.images.length) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Nieprawidłowy indeks zdjęcia.'
       });
+      return;
     }
 
     // Get image URL
@@ -225,7 +236,7 @@ export const removeProductImage = async (req: Request, res: Response) => {
     });
 
     // Return updated image URLs
-    return res.json({
+    res.json({
       success: true,
       data: {
         imageUrls: updatedImages
@@ -233,7 +244,7 @@ export const removeProductImage = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error removing product image:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas usuwania zdjęcia.'
     });
@@ -243,16 +254,17 @@ export const removeProductImage = async (req: Request, res: Response) => {
 /**
  * Set main product image (reorder images)
  */
-export const setMainProductImage = async (req: Request, res: Response) => {
+export const setMainProductImage = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id, imageIndex } = req.params;
     
     // Add null check before accessing req.user
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
     const userId = req.user.id;
 
@@ -260,38 +272,42 @@ export const setMainProductImage = async (req: Request, res: Response) => {
     const productDoc = await productsCollection.doc(id).get();
     
     if (!productDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
+      return;
     }
 
     const product = productDoc.data() as ProductData | undefined;
     
     // Add null check for product
     if (!product) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Brak danych produktu.'
       });
+      return;
     }
 
     // Check if user is the owner
     if (product.owner !== userId) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
       });
+      return;
     }
 
     // Check if image index is valid
     const index = parseInt(imageIndex, 10);
     
     if (isNaN(index) || index < 0 || index >= product.images.length) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Nieprawidłowy indeks zdjęcia.'
       });
+      return;
     }
 
     // Move selected image to the beginning of the array
@@ -307,7 +323,7 @@ export const setMainProductImage = async (req: Request, res: Response) => {
     });
 
     // Return updated image URLs
-    return res.json({
+    res.json({
       success: true,
       data: {
         imageUrls: updatedImages
@@ -315,10 +331,9 @@ export const setMainProductImage = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error setting main product image:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas ustawiania głównego zdjęcia.'
-      
     });
   }
 };

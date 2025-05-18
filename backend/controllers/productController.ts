@@ -1,39 +1,48 @@
-// backend/controllers/productController.ts
+// backend/controllers/productController.ts - Fixed version with proper return types
 import { Request, Response } from 'express';
-import { Product } from '../models/Product';
-import { User } from '../models/Users';
+import { admin } from '../firebase';
+import { calculateDistance } from '../utils/geoUtils';
+import { generateTrackingId } from '../utils/productUtils';
+import { productsCollection, usersCollection } from '../models/collections';
+import { FirestoreProduct, ProductOwner } from '../types';
+import { convertToDate } from '../../src/shared/utils/firebase';
 import { uploadImageToStorage } from '../services/fileStorageService';
-import { generateTrackingId, calculateDistance } from '../utils/productUtils';
-import { FirestoreProduct } from '../types';
 
-// Define a type for query filters
-type QueryFilter = {
-  status?: string;
-  category?: string;
+// Interface for the product data coming from the request body (likely FormData)
+interface ProductRequestBody {
+  name: string;
+  description: string;
+  price: string; // FormData sends numbers as strings
+  quantity: string; // FormData sends numbers as strings
+  unit: string;
+  category: string;
   subcategory?: string;
-  price?: {
-    $gte?: number;
-    $lte?: number;
-  };
-  owner?: string;
-  certificates?: {
-    $in: string[];
-  };
-  $or?: Array<{
-    [key: string]: {
-      $regex: string;
-      $options: string;
-    };
-  }>;
-};
+  harvestDate?: string; // ISO date string
+  certificates?: string | string[]; // Can be single or multiple
+  'location.coordinates[0]'?: string;
+  'location.coordinates[1]'?: string;
+  'location.address'?: string;
+}
 
-// Define a type for sort options
-type SortOptions = Record<string, 1 | -1>;
+// Define an interface for the user document structure from Firestore
+interface UserDocData extends admin.firestore.DocumentData {
+  passwordHash: string;
+  fullName: string;
+  email?: string;
+  phoneNumber?: string;
+  profileImage?: string;
+  location?: {
+    type: string;
+    coordinates: [number, number];
+    address: string;
+  };
+  role?: string;
+}
 
 /**
  * Get all products with filtering, sorting, and pagination
  */
-export const getProducts = async (req: Request, res: Response) => {
+export const getProducts = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       category,
@@ -52,120 +61,99 @@ export const getProducts = async (req: Request, res: Response) => {
       limit = 12
     } = req.query;
 
-    // Build query as a single object
-    const query: QueryFilter = { status: 'available' };
+    // Start building query
+    let query = productsCollection.where('status', '==', 'available');
 
     // Apply filters
     if (category) {
-      query.category = category as string;
+      query = query.where('category', '==', category);
     }
 
     if (subcategory) {
-      query.subcategory = subcategory as string;
-    }
-
-    if (minPrice) {
-      query.price = { ...query.price, $gte: Number(minPrice) };
-    }
-
-    if (maxPrice) {
-      query.price = { ...query.price, $lte: Number(maxPrice) };
+      query = query.where('subcategory', '==', subcategory);
     }
 
     if (farmer) {
-      query.owner = farmer as string;
+      query = query.where('owner', '==', farmer);
     }
 
     if (certificate) {
-      query.certificates = { $in: [certificate as string] };
+      query = query.where('certificates', 'array-contains', certificate);
     }
 
-    // Apply text search
-    if (search) {
-      query.$or = [
-        { name: { $regex: search as string, $options: 'i' } },
-        { description: { $regex: search as string, $options: 'i' } }
-      ];
+    // Execute query
+    const snapshot = await query.get();
+
+    // Convert to array of products
+    let products: FirestoreProduct[] = [];
+    
+    snapshot.forEach(doc => {
+      const product = {
+        _id: doc.id,
+        ...doc.data()
+      } as FirestoreProduct;
+      
+      // Apply additional filters that couldn't be done in Firestore query
+      if (minPrice && product.price < Number(minPrice)) return;
+      if (maxPrice && product.price > Number(maxPrice)) return;
+      
+      // Apply text search if provided
+      if (search) {
+        const searchLower = (search as string).toLowerCase();
+        const nameMatch = product.name.toLowerCase().includes(searchLower);
+        const descMatch = product.description.toLowerCase().includes(searchLower);
+        if (!nameMatch && !descMatch) return;
+      }
+      
+      products.push(product);
+    });
+    
+    // Filter by location if coordinates provided
+    if (lat && lng) {
+      const userLocation: [number, number] = [Number(lng), Number(lat)];
+      const maxDistance = Number(radius);
+      
+      products = products.filter(product => {
+        if (!product.location?.coordinates) return false;
+        
+        const distance = calculateDistance(
+          userLocation[1], // user latitude
+          userLocation[0], // user longitude
+          product.location.coordinates[1],
+          product.location.coordinates[0]
+        );
+        
+        // Add distance to product
+        product.distance = distance;
+        
+        // Keep only products within radius
+        return distance <= maxDistance;
+      });
     }
-
-    // Apply sorting
-    const sortOptions: SortOptions = {};
-    switch (sortBy as string) {
-      case 'price':
-        sortOptions.price = sortOrder === 'asc' ? 1 : -1;
-        break;
-      case 'rating':
-        sortOptions.averageRating = sortOrder === 'asc' ? 1 : -1;
-        break;
-      case 'date':
-      default:
-        sortOptions.createdAt = sortOrder === 'asc' ? 1 : -1;
-        break;
-    }
-
-    // Count total documents for pagination
-    const totalProducts = await Product.countDocuments(query);
-
+    
+    // Sort products
+    products = sortProducts(products, sortBy as string, sortOrder as string);
+    
     // Apply pagination
     const skip = (Number(page) - 1) * Number(limit);
+    const paginatedProducts = products.slice(skip, skip + Number(limit));
     
-    // Execute query with all parameters at once
-    let products = await Product.find(query)
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .exec();
-
-    // Filter by location and calculate distance if coordinates provided
-    if (lat && lng) {
-      const userLat = Number(lat);
-      const userLng = Number(lng);
-      const maxRadius = Number(radius);
-
-      // Filter products by distance and add distance property
-      products = products
-        .filter((product: FirestoreProduct) => {
-          // Skip products without location
-          if (!product.location?.coordinates) return false;
-
-          const distance = calculateDistance(
-            userLat,
-            userLng,
-            product.location.coordinates[1],
-            product.location.coordinates[0]
-          );
-
-          // Add distance to product
-          product.distance = distance;
-
-          // Keep only products within radius
-          return distance <= maxRadius;
-        })
-        .sort((a: FirestoreProduct, b: FirestoreProduct) => {
-          // If sortBy is distance, sort by distance
-          if (sortBy === 'distance') {
-            return sortOrder === 'asc'
-              ? (a.distance || 0) - (b.distance || 0)
-              : (b.distance || 0) - (a.distance || 0);
-          }
-          return 0; // Keep original sort for other cases
-        });
-    }
-
-    // Return formatted response
-    return res.json({
+    // Populate owner data for each product
+    const populatedProducts = await populateProductOwners(paginatedProducts);
+    
+    res.json({
       success: true,
       data: {
-        items: products,
-        total: products.length, // Use filtered length if location filtering applied
+        items: populatedProducts,
+        total: products.length,
         page: Number(page),
         limit: Number(limit),
-        totalPages: Math.ceil(totalProducts / Number(limit))
+        totalPages: Math.ceil(products.length / Number(limit))
       }
     });
   } catch (error) {
     console.error('Error getting products:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas pobierania produktów.'
     });
@@ -175,26 +163,59 @@ export const getProducts = async (req: Request, res: Response) => {
 /**
  * Get a single product by ID
  */
-export const getProductById = async (req: Request, res: Response) => {
+export const getProductById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const product = await Product.findById(id);
-
-    if (!product) {
-      return res.status(404).json({
+    const productDoc = await productsCollection.doc(id).get();
+    
+    if (!productDoc.exists) {
+      res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
+      return;
+    }
+    
+    const product = {
+      _id: productDoc.id,
+      ...productDoc.data()
+    } as FirestoreProduct;
+    
+    // Populate owner data
+    let populatedProduct = product;
+    
+    if (product.owner) {
+      try {
+        const ownerDoc = await usersCollection.doc(product.owner as string).get();
+        if (ownerDoc.exists) {
+          const ownerData = ownerDoc.data() as UserDocData | undefined;
+          
+          if (ownerData) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { passwordHash, ...safeOwnerData } = ownerData;
+            
+            populatedProduct = {
+              ...product,
+              owner: {
+                _id: ownerDoc.id,
+                ...safeOwnerData
+              } as ProductOwner
+            };
+          }
+        }
+      } catch (error) {
+        console.error('Error populating owner data:', error);
+      }
     }
 
-    return res.json({
+    res.json({
       success: true,
-      data: product
+      data: populatedProduct
     });
   } catch (error) {
     console.error('Error getting product:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas pobierania produktu.'
     });
@@ -204,13 +225,15 @@ export const getProductById = async (req: Request, res: Response) => {
 /**
  * Create a new product
  */
-export const createProduct = async (req: Request, res: Response) => {
+export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Add null check before accessing req.user
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
     const userId = req.user.id;
 
@@ -224,8 +247,8 @@ export const createProduct = async (req: Request, res: Response) => {
       category,
       subcategory,
       harvestDate,
-      certificates
-    } = req.body;
+      certificates,
+    } = req.body as ProductRequestBody;
 
     // Parse location if provided
     let location;
@@ -236,12 +259,12 @@ export const createProduct = async (req: Request, res: Response) => {
           Number(req.body['location.coordinates[0]']),
           Number(req.body['location.coordinates[1]'])
         ] as [number, number],
-        address: req.body['location.address']
+        address: req.body['location.address'] as string
       };
     }
 
-    // Create a new product
-    const newProduct = new Product({
+    // Create a new product object
+    const newProduct = {
       name,
       description,
       price: Number(price),
@@ -251,21 +274,24 @@ export const createProduct = async (req: Request, res: Response) => {
       subcategory,
       owner: userId,
       location,
-      harvestDate,
+      harvestDate: harvestDate ? new Date(harvestDate) : undefined,
       certificates: certificates ? Array.isArray(certificates) ? certificates : [certificates] : [],
       status: 'available',
       statusHistory: [
         {
           status: 'available',
-          timestamp: new Date(),
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
           updatedBy: userId
         }
       ],
       trackingId: generateTrackingId(),
       isCertified: certificates && (Array.isArray(certificates) ? certificates.length > 0 : true),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
+      images: [] as string[],
+      averageRating: 0,
+      reviews: [] as string[],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
 
     // Process images
     const images = req.files as Express.Multer.File[];
@@ -277,62 +303,91 @@ export const createProduct = async (req: Request, res: Response) => {
       );
 
       newProduct.images = imageUrls;
-    } else {
-      newProduct.images = [];
     }
 
-    // Save product
-    await newProduct.save();
+    // Save product to Firestore
+    const productRef = await productsCollection.add(newProduct);
 
     // Add product to user's created products
-    await User.findByIdAndUpdate(userId, {
-      $push: { createdProducts: newProduct._id }
+    await usersCollection.doc(userId).update({
+      createdProducts: admin.firestore.FieldValue.arrayUnion(productRef.id)
     });
 
     // Return created product
-    return res.status(201).json({
+    const createdProduct = {
+      _id: productRef.id,
+      ...newProduct
+    };
+
+    res.status(201).json({
       success: true,
-      data: newProduct
+      data: createdProduct
     });
   } catch (error) {
     console.error('Error creating product:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas tworzenia produktu.'
     });
   }
 };
 
+// Specific type for Firestore update payload to avoid using 'any'
+type ProductFirestoreUpdateData = Partial<Omit<FirestoreProduct, 'createdAt' | 'updatedAt' | 'images' | 'statusHistory' | 'certificates' | 'location' | 'harvestDate'>> & {
+  name?: string;
+  description?: string;
+  price?: number;
+  quantity?: number;
+  unit?: string;
+  category?: string;
+  subcategory?: string | admin.firestore.FieldValue;
+  location?: FirestoreProduct['location'] | admin.firestore.FieldValue;
+  harvestDate?: Date | null | admin.firestore.FieldValue;
+  certificates?: string[];
+  isCertified?: boolean;
+  images?: admin.firestore.FieldValue;
+  updatedAt: admin.firestore.FieldValue;
+};
+
 /**
  * Update a product
  */
-export const updateProduct = async (req: Request, res: Response) => {
+export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    // Add null check before accessing req.user
+    
+    // Check if user is authenticated
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
+    
     const userId = req.user.id;
 
     // Check if product exists
-    const product = await Product.findById(id);
+    const productDoc = await productsCollection.doc(id).get();
+    
+    const product = productDoc.data();
+    
+    // Add an explicit check for product data
     if (!product) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
-        error: 'Produkt nie znaleziony.'
+        error: 'Produkt nie znaleziony (brak danych).'
       });
+      return;
     }
-
+    
     // Check if user is the owner
-    if ((product.owner as string) !== userId) {
-      return res.status(403).json({
+    if (product.owner !== userId) {
+      res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do edycji tego produktu.'
       });
+      return;
     }
 
     // Extract form data
@@ -345,8 +400,8 @@ export const updateProduct = async (req: Request, res: Response) => {
       category,
       subcategory,
       harvestDate,
-      certificates
-    } = req.body;
+      certificates,
+    } = req.body as ProductRequestBody;
 
     // Parse location if provided
     let location;
@@ -357,42 +412,27 @@ export const updateProduct = async (req: Request, res: Response) => {
           Number(req.body['location.coordinates[0]']),
           Number(req.body['location.coordinates[1]'])
         ] as [number, number],
-        address: req.body['location.address']
+        address: req.body['location.address'] as string
       };
     }
 
-    // Update fields
-    type UpdateData = {
-      updatedAt: Date;
-      name?: string;
-      description?: string;
-      price?: number;
-      quantity?: number;
-      unit?: string;
-      category?: string;
-      subcategory?: string;
-      harvestDate?: unknown;
-      location?: typeof location;
-      certificates?: string[];
-      isCertified?: boolean;
-      images?: string[];
-    };
-
-    const updateData: UpdateData = {
-      updatedAt: new Date()
+    // Prepare update data
+    const updateData: ProductFirestoreUpdateData = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (price !== undefined) updateData.price = Number(price);
-    if (quantity !== undefined) updateData.quantity = Number(quantity);
-    if (unit !== undefined) updateData.unit = unit;
-    if (category !== undefined) updateData.category = category;
+    // Add fields to update only if they exist in the request
+    if (name) updateData.name = name;
+    if (description) updateData.description = description;
+    if (price) updateData.price = Number(price);
+    if (quantity) updateData.quantity = Number(quantity);
+    if (unit) updateData.unit = unit;
+    if (category) updateData.category = category;
     if (subcategory !== undefined) updateData.subcategory = subcategory;
-    if (harvestDate !== undefined) updateData.harvestDate = harvestDate;
-    if (location !== undefined) updateData.location = location;
+    if (harvestDate) updateData.harvestDate = new Date(harvestDate);
+    if (location) updateData.location = location;
     
-    // Update certificates
+    // Update certificates if provided
     if (certificates) {
       updateData.certificates = Array.isArray(certificates) ? certificates : [certificates];
       updateData.isCertified = updateData.certificates.length > 0;
@@ -408,20 +448,26 @@ export const updateProduct = async (req: Request, res: Response) => {
       );
 
       // Add new images to existing images array
-      updateData.images = [...(product.images || []), ...imageUrls];
+      updateData.images = admin.firestore.FieldValue.arrayUnion(...imageUrls);
     }
 
-    // Update product
-    const updatedProduct = await Product.findByIdAndUpdate(id, updateData);
+    // Update product in Firestore
+    await productsCollection.doc(id).update(updateData);
+    
+    // Get updated product
+    const updatedProductDoc = await productsCollection.doc(id).get();
+    const updatedProduct = {
+      _id: updatedProductDoc.id,
+      ...updatedProductDoc.data()
+    };
 
-    // Return updated product
-    return res.json({
+    res.json({
       success: true,
       data: updatedProduct
     });
   } catch (error) {
     console.error('Error updating product:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas aktualizacji produktu.'
     });
@@ -431,56 +477,62 @@ export const updateProduct = async (req: Request, res: Response) => {
 /**
  * Delete a product
  */
-export const deleteProduct = async (req: Request, res: Response) => {
+export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    // Add null check before accessing req.user
+    
+    // Check if user is authenticated
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
+    
     const userId = req.user.id;
-    
+
     // Check if product exists
-    const product = await Product.findById(id);
+    const productDoc = await productsCollection.doc(id).get();
+    
+    const product = productDoc.data();
+    
+    // Add an explicit check for product data to satisfy TypeScript
     if (!product) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
-        error: 'Produkt nie znaleziony.'
+        error: 'Produkt nie znaleziony (brak danych po odczycie).'
       });
+      return;
     }
     
-    // Since we've already checked req.user above, this is safe
+    // Now we know req.user exists, so this is safe
     if (product.owner !== userId && req.user.role !== 'admin') {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do usunięcia tego produktu.'
       });
+      return;
     }
 
     // Set product as unavailable instead of deleting
-    await Product.findByIdAndUpdate(id, {
+    await productsCollection.doc(id).update({
       status: 'unavailable',
-      statusHistory: [
-        ...(product.statusHistory || []),
-        {
-          status: 'unavailable',
-          timestamp: new Date(),
-          updatedBy: userId
-        }
-      ],
-      updatedAt: new Date()
+      statusHistory: admin.firestore.FieldValue.arrayUnion({
+        status: 'unavailable',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: userId
+      }),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    return res.json({
+    res.json({
       success: true,
       message: 'Produkt został usunięty.'
     });
   } catch (error) {
     console.error('Error deleting product:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas usuwania produktu.'
     });
@@ -490,7 +542,7 @@ export const deleteProduct = async (req: Request, res: Response) => {
 /**
  * Get products by farmer
  */
-export const getProductsByFarmer = async (req: Request, res: Response) => {
+export const getProductsByFarmer = async (req: Request, res: Response): Promise<void> => {
   try {
     const { farmerId } = req.params;
     const {
@@ -500,40 +552,58 @@ export const getProductsByFarmer = async (req: Request, res: Response) => {
     } = req.query;
 
     // Check if farmer exists
-    const farmer = await User.findById(farmerId);
-    if (!farmer || farmer.role !== 'farmer') {
-      return res.status(404).json({
+    const farmerDoc = await usersCollection.doc(farmerId as string).get();
+    const farmerData = farmerDoc.data();
+    
+    if (!farmerDoc.exists || !farmerData || farmerData.role !== 'farmer') {
+      res.status(404).json({
         success: false,
         error: 'Rolnik nie znaleziony.'
       });
+      return;
     }
 
     // Build query
-    const query: Record<string, string> = { owner: farmerId };
-
-    // Filter by status if provided
+    let query = productsCollection.where('owner', '==', farmerId);
+    
+    // Filter by status if not 'all'
     if (status !== 'all') {
-      query.status = status as string;
+      query = query.where('status', '==', status);
     }
-
-    // Count total documents for pagination
-    const totalProducts = await Product.countDocuments(query);
-
-    // Apply pagination
-    const skip = (Number(page) - 1) * Number(limit);
     
     // Execute query
-    const products = await Product.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .exec();
+    const snapshot = await query.get();
+    const totalProducts = snapshot.size;
+    
+    // Get all products (we'll handle pagination in memory since Firestore doesn't have skip/limit like MongoDB)
+    const products: FirestoreProduct[] = [];
+    
+    snapshot.forEach(doc => {
+      products.push({
+        _id: doc.id,
+        ...doc.data()
+      } as FirestoreProduct);
+    });
+    
+    // Sort by created date (newest first)
+    const sortedProducts = products.sort((a, b) => {
+      const dateA = convertToDate(a.createdAt) || new Date();
+      const dateB = convertToDate(b.createdAt) || new Date();
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    // Apply pagination
+    const paginationOffset = (Number(page) - 1) * Number(limit);
+    const paginatedProducts = sortedProducts.slice(
+      paginationOffset, 
+      paginationOffset + Number(limit)
+    );
 
     // Return formatted response
-    return res.json({
+    res.json({
       success: true,
       data: {
-        items: products,
+        items: paginatedProducts,
         total: totalProducts,
         page: Number(page),
         limit: Number(limit),
@@ -542,9 +612,84 @@ export const getProductsByFarmer = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error getting farmer products:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas pobierania produktów rolnika.'
     });
   }
 };
+
+/**
+ * Helper function to sort products
+ */
+function sortProducts(products: FirestoreProduct[], sortBy: string, sortOrder: string): FirestoreProduct[] {
+  return [...products].sort((a, b) => {
+    const multiplier = sortOrder === 'asc' ? 1 : -1;
+    
+    switch (sortBy) {
+      case 'price': {
+        return (a.price - b.price) * multiplier;
+      }
+      
+      case 'rating': {
+        return (a.averageRating - b.averageRating) * multiplier;
+      }
+      
+      case 'distance': {
+        // Default to 0 if distance not calculated
+        const distanceA = a.distance || 0;
+        const distanceB = b.distance || 0;
+        return (distanceA - distanceB) * multiplier;
+      }
+      
+      case 'date':
+      default: {
+        const dateA = a.createdAt instanceof Date ? a.createdAt :
+                     (a.createdAt && typeof a.createdAt === 'object' && 'toDate' in a.createdAt) 
+                     ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        
+        const dateB = b.createdAt instanceof Date ? b.createdAt :
+                     (b.createdAt && typeof b.createdAt === 'object' && 'toDate' in b.createdAt) 
+                     ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        
+        return (dateB.getTime() - dateA.getTime()) * (sortOrder === 'asc' ? -1 : 1);
+      }
+    }
+  });
+}
+
+/**
+ * Helper function to populate product owners
+ */
+async function populateProductOwners(products: FirestoreProduct[]): Promise<FirestoreProduct[]> {
+  const populatedProducts = await Promise.all(products.map(async (product) => {
+    if (typeof product.owner === 'string') {
+      try {
+        const ownerDoc = await usersCollection.doc(product.owner).get();
+        
+        if (ownerDoc.exists) {
+          const ownerData = ownerDoc.data() as UserDocData | undefined;
+
+          if (ownerData) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { passwordHash, ...safeOwnerData } = ownerData;
+            
+            return {
+              ...product,
+              owner: {
+                _id: ownerDoc.id,
+                ...safeOwnerData
+              } as ProductOwner
+            };
+          }
+        }
+      } catch (error) {
+        console.error(`Error populating owner for product ${product._id}:`, error);
+      }
+    }
+    
+    return product;
+  }));
+  
+  return populatedProducts;
+}

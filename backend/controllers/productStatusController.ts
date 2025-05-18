@@ -1,4 +1,4 @@
-// backend/controllers/productStatusController.ts (Fixed version)
+// backend/controllers/productStatusController.ts - Fixed version
 import { Request, Response } from 'express';
 import { admin } from '../firebase';
 import { PRODUCT_STATUSES } from '../../src/shared/constants';
@@ -22,7 +22,7 @@ interface UserData {
     address: string;
     type?: string;
   };
-  [key: string]: unknown; // For other properties we don't explicitly define
+  [key: string]: unknown;
 }
 
 interface ProductData {
@@ -37,7 +37,7 @@ interface ProductData {
     address: string;
     type?: string;
   };
-  [key: string]: unknown; // For other properties we don't explicitly define
+  [key: string]: unknown;
 }
 
 interface OwnerData {
@@ -53,52 +53,57 @@ interface OwnerData {
 /**
  * Update product status
  */
-export const updateProductStatus = async (req: Request, res: Response) => {
+export const updateProductStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { status, note } = req.body;
     
     // Add null check before accessing req.user
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
     const userId = req.user.id;
 
     // Validate status
     if (!status || !Object.values(PRODUCT_STATUSES).includes(status)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Nieprawidłowy status produktu.'
       });
+      return;
     }
 
     // Check if product exists
     const productDoc = await productsCollection.doc(id).get();
     
     if (!productDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
+      return;
     }
 
     const productData = productDoc.data() as ProductData | undefined;
     if (!productData) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Brak danych produktu.'
       });
+      return;
     }
 
     // Check if user is the owner
     if (productData.owner !== userId) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Nie masz uprawnień do zmiany statusu tego produktu.'
       });
+      return;
     }
 
     // Create status history item
@@ -124,10 +129,11 @@ export const updateProductStatus = async (req: Request, res: Response) => {
     const updatedProductDoc = await productsCollection.doc(id).get();
     const updatedProductData = updatedProductDoc.data() as ProductData | undefined;
     if (!updatedProductData) {
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
         error: 'Błąd podczas pobierania zaktualizowanego produktu.'
       });
+      return;
     }
 
     const updatedProduct = {
@@ -136,13 +142,13 @@ export const updateProductStatus = async (req: Request, res: Response) => {
     };
 
     // Return updated product
-    return res.json({
+    res.json({
       success: true,
       data: updatedProduct
     });
   } catch (error) {
     console.error('Error updating product status:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas aktualizacji statusu produktu.'
     });
@@ -152,7 +158,7 @@ export const updateProductStatus = async (req: Request, res: Response) => {
 /**
  * Get product tracking information
  */
-export const getProductTracking = async (req: Request, res: Response) => {
+export const getProductTracking = async (req: Request, res: Response): Promise<void> => {
   try {
     const { trackingId } = req.params;
 
@@ -163,19 +169,21 @@ export const getProductTracking = async (req: Request, res: Response) => {
       .get();
 
     if (productsSnapshot.empty) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Produkt o podanym identyfikatorze śledzenia nie został znaleziony.'
       });
+      return;
     }
 
     const productDoc = productsSnapshot.docs[0];
     const productData = productDoc.data() as ProductData | undefined;
     if (!productData) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Brak danych produktu.'
       });
+      return;
     }
 
     // Get owner data
@@ -232,7 +240,7 @@ export const getProductTracking = async (req: Request, res: Response) => {
     }
 
     // Return tracking information
-    return res.json({
+    res.json({
       success: true,
       data: {
         product: {
@@ -249,7 +257,7 @@ export const getProductTracking = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error getting product tracking:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas pobierania informacji o śledzeniu produktu.'
     });
@@ -259,7 +267,7 @@ export const getProductTracking = async (req: Request, res: Response) => {
 /**
  * Get product status history
  */
-export const getProductStatusHistory = async (req: Request, res: Response) => {
+export const getProductStatusHistory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
@@ -267,22 +275,24 @@ export const getProductStatusHistory = async (req: Request, res: Response) => {
     const productDoc = await productsCollection.doc(id).get();
     
     if (!productDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Produkt nie znaleziony.'
       });
+      return;
     }
 
     const productData = productDoc.data() as ProductData | undefined;
     if (!productData) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Brak danych produktu.'
       });
+      return;
     }
 
     // Return status history
-    return res.json({
+    res.json({
       success: true,
       data: {
         statusHistory: productData.statusHistory || []
@@ -290,7 +300,7 @@ export const getProductStatusHistory = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error getting product status history:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas pobierania historii statusu produktu.'
     });

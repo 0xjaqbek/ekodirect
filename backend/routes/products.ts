@@ -1,5 +1,5 @@
-// backend/routes/products.ts
-import express from 'express';
+// backend/routes/products.ts - Fixed version
+import express, { type RequestHandler } from 'express';
 import multer from 'multer';
 import { authenticateUser } from '../middleware/auth';
 import { 
@@ -56,28 +56,28 @@ const upload = multer({
  * @route GET /api/products
  * @access Public
  */
-router.get('/', getProducts);
+router.get('/', getProducts as RequestHandler);
 
 /**
  * Get products by farmer
  * @route GET /api/products/farmer/:farmerId
  * @access Public
  */
-router.get('/farmer/:farmerId', getProductsByFarmer);
+router.get('/farmer/:farmerId', getProductsByFarmer as RequestHandler);
 
 /**
  * Get product tracking information
  * @route GET /api/products/tracking/:trackingId
  * @access Public
  */
-router.get('/tracking/:trackingId', getProductTracking);
+router.get('/tracking/:trackingId', getProductTracking as RequestHandler);
 
 /**
  * Get a single product
  * @route GET /api/products/:id
  * @access Public
  */
-router.get('/:id', productExists, getProductById);
+router.get('/:id', productExists, getProductById as RequestHandler);
 
 /**
  * Create a new product
@@ -90,7 +90,7 @@ router.post(
   configureProductImageUpload,
   upload.array('images', VALIDATION.MAX_IMAGES_PER_PRODUCT),
   validateProductData,
-  createProduct
+  createProduct as RequestHandler
 );
 
 /**
@@ -106,7 +106,7 @@ router.put(
   configureProductImageUpload,
   upload.array('images', VALIDATION.MAX_IMAGES_PER_PRODUCT),
   validateProductData,
-  updateProduct
+  updateProduct as RequestHandler
 );
 
 /**
@@ -119,7 +119,7 @@ router.delete(
   authenticateUser, 
   productExists,
   isProductOwner,
-  deleteProduct
+  deleteProduct as RequestHandler
 );
 
 /**
@@ -134,7 +134,7 @@ router.post(
   isProductOwner,
   configureProductImageUpload,
   upload.array('images', VALIDATION.MAX_IMAGES_PER_PRODUCT),
-  uploadProductImages
+  uploadProductImages as RequestHandler
 );
 
 /**
@@ -147,7 +147,7 @@ router.delete(
   authenticateUser,
   productExists,
   isProductOwner,
-  removeProductImage
+  removeProductImage as RequestHandler
 );
 
 /**
@@ -160,7 +160,7 @@ router.put(
   authenticateUser,
   productExists,
   isProductOwner,
-  setMainProductImage
+  setMainProductImage as RequestHandler
 );
 
 /**
@@ -173,7 +173,7 @@ router.put(
   authenticateUser,
   productExists,
   isProductOwner,
-  updateProductStatus
+  updateProductStatus as RequestHandler
 );
 
 /**
@@ -185,7 +185,7 @@ router.get(
   '/:id/status/history',
   authenticateUser,
   productExists,
-  getProductStatusHistory
+  getProductStatusHistory as RequestHandler
 );
 
 export default router;
