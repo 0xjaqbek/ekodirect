@@ -1,4 +1,4 @@
-// shared/types/index.ts
+// src/shared/types/index.ts - Updated with proper index signatures
 import { type ProductUnit, type ProductCategory } from '../constants';
 // Podstawowe interfejsy
 export interface User {
@@ -203,6 +203,7 @@ export interface User {
     deliveryDate?: Date;
   }
   
+  // Updated ProductFilterParams with index signature for API compatibility
   export interface ProductFilterParams {
     category?: string;
     subcategory?: string;
@@ -217,4 +218,6 @@ export interface User {
     sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
+    // Add index signature to make it compatible with RequestParams
+    [key: string]: string | number | [number, number] | undefined;
   }

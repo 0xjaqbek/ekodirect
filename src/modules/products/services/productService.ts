@@ -1,4 +1,4 @@
-// src/modules/products/services/productService.ts
+// src/modules/products/services/productService.ts - Fixed version
 import apiClient from '../../../shared/api';
 import { API_ROUTES } from '../../../shared/constants';
 import { 
@@ -7,6 +7,30 @@ import {
   type ProductFilterParams,
   type CreateProductRequest 
 } from '../../../shared/types';
+
+// Helper function to convert ProductFilterParams to RequestParams
+function convertFiltersToRequestParams(filters: ProductFilterParams): Record<string, string | number | boolean | undefined> {
+  const params: Record<string, string | number | boolean | undefined> = {};
+  
+  // Convert all properties to compatible types
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      // Handle location array specially - convert to separate lat/lng params
+      if (key === 'location' && Array.isArray(value) && value.length === 2) {
+        params.lat = value[1]; // latitude
+        params.lng = value[0]; // longitude
+      } else if (Array.isArray(value)) {
+        // Handle other arrays by joining them
+        params[key] = value.join(',');
+      } else {
+        // Handle primitive types
+        params[key] = value;
+      }
+    }
+  });
+  
+  return params;
+}
 
 /**
  * Service for product-related API operations
@@ -22,7 +46,9 @@ class ProductService {
     limit: number;
     totalPages: number;
   }>> {
-    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, filters);
+    // Convert filters to compatible format
+    const requestParams = filters ? convertFiltersToRequestParams(filters) : undefined;
+    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, requestParams);
   }
 
   /**
@@ -99,10 +125,15 @@ class ProductService {
     limit: number;
     totalPages: number;
   }>> {
-    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, { 
+    // Combine farmer ID with other filters
+    const combinedFilters = { 
       ...filters,
       farmer: farmerId 
-    });
+    };
+    
+    // Convert to request params
+    const requestParams = convertFiltersToRequestParams(combinedFilters);
+    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, requestParams);
   }
 
   /**
@@ -115,10 +146,15 @@ class ProductService {
     limit: number;
     totalPages: number;
   }>> {
-    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, {
+    // Combine search term with other filters
+    const combinedFilters = {
       ...filters,
       search: searchTerm
-    });
+    };
+    
+    // Convert to request params
+    const requestParams = convertFiltersToRequestParams(combinedFilters);
+    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, requestParams);
   }
 }
 

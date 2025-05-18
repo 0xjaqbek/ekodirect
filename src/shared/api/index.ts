@@ -1,4 +1,4 @@
-// Updated src/shared/api/index.ts with proper types
+// Updated src/shared/api/index.ts with improved RequestParams type
 
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { STORAGE_KEYS } from '../constants';
@@ -17,7 +17,7 @@ interface ErrorResponseData {
   error?: string;
 }
 
-// Define Request Parameters type
+// Define Request Parameters type with explicit allowed types
 export type RequestParams = Record<string, string | number | boolean | undefined | null>;
 
 // Konfiguracja API
@@ -151,9 +151,9 @@ export const apiClient = {
   /**
    * Wykonaj żądanie PUT
    */
-  put: async <T>(url: string, data?: unknown): Promise<ApiResponse<T>> => {
+  put: async <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.put(url, data);
+      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.put(url, data, config);
       return response.data;
     } catch (error) {
       if (error instanceof Error) {
