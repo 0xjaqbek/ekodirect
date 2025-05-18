@@ -1,6 +1,9 @@
 {
     "watch": ["./"],
-    "ext": "ts",
-    "exec": "ts-node-esm ./server.ts"
+    "ext": "js,ts,mts,mjs",
+    "ignore": ["node_modules", "dist"],
+    "exec": "node ./bootstrap.mjs",
+    "env": {
+      "NODE_ENV": "development"
+    }
   }
-  

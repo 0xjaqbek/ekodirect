@@ -1,16 +1,24 @@
-// backend/services/fileStorageService.ts
+// backend/services/fileStorageService.ts - Fixed with proper bucket handling
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { promisify } from 'util';
-import { admin } from '../firebase';
+import { getBucket } from '../firebase.js';
 import sharp from 'sharp';
 import os from 'os';
 
-
-const bucket = admin.storage().bucket();
 const writeFile = promisify(fs.writeFile);
 const unlink = promisify(fs.unlink);
+
+// Get bucket instance with error handling
+let bucket: any = null;
+
+try {
+  bucket = getBucket();
+} catch (error) {
+  console.warn('Storage bucket not available:', error);
+  console.warn('File upload features will be disabled');
+}
 
 /**
  * Upload an image to Firebase Storage
@@ -22,6 +30,10 @@ export const uploadImageToStorage = async (
   file: Express.Multer.File,
   folder: string = 'uploads'
 ): Promise<string> => {
+  if (!bucket) {
+    throw new Error('Storage bucket not configured. File upload is not available.');
+  }
+
   try {
     // Generate a unique filename
     const filename = generateUniqueFilename(file.originalname);
@@ -55,7 +67,8 @@ export const uploadImageToStorage = async (
     await fileRef.makePublic();
     
     // Get the file's public URL
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+    const bucketName = bucket.name;
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${destination}`;
     
     return publicUrl;
   } catch (error) {
@@ -102,18 +115,30 @@ const processImage = async (buffer: Buffer): Promise<Buffer> => {
  * @returns Whether the deletion was successful
  */
 export const deleteImageFromStorage = async (url: string): Promise<boolean> => {
+  if (!bucket) {
+    console.warn('Storage bucket not configured. Cannot delete image.');
+    return false;
+  }
+
   try {
     // Extract filename from URL
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-    const filepath = pathname.replace(`/storage/v1/b/${bucket.name}/o/`, '').split('?')[0];
+    const decodedUrl = decodeURIComponent(url);
+    const bucketName = bucket.name;
+    const baseUrl = `https://storage.googleapis.com/${bucketName}/`;
     
-    // Delete file from Firebase Storage
-    await bucket.file(filepath).delete();
+    if (!decodedUrl.startsWith(baseUrl)) {
+      console.warn('URL does not match expected bucket URL format');
+      return false;
+    }
+    
+    const filePath = decodedUrl.replace(baseUrl, '').split('?')[0];
+    
+    // Delete file from Storage
+    await bucket.file(filePath).delete();
     
     return true;
-  } catch (error) {
-    console.error('Error deleting image from storage:', error);
+  } catch (deleteError) {
+    console.error('Error deleting image from storage:', deleteError);
     return false;
   }
 };
@@ -129,4 +154,12 @@ const generateUniqueFilename = (originalname: string): string => {
   const extension = path.extname(originalname);
   
   return `${timestamp}-${randomStr}${extension}`;
+};
+
+/**
+ * Check if storage is available
+ * @returns Whether storage is configured and available
+ */
+export const isStorageAvailable = (): boolean => {
+  return bucket !== null;
 };

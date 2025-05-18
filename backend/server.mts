@@ -1,15 +1,15 @@
-// backend/server.ts - Fixed error handling middleware
+// backend/server.mts - Fixed version
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
 // Import Firebase initialization (this needs to be imported early)
-import './firebase';
+import './firebase.js';
 
 // Import routes
-import authRoutes from './routes/auth';
-import userRoutes from './routes/users'; // This will now correctly import users.ts
-import productRoutes from './routes/products';
+import authRoutes from './routes/auth.js';
+import userRoutes from './routes/users.js';
+import productRoutes from './routes/products.js';
 
 // Initialize environment variables
 dotenv.config();
@@ -39,20 +39,17 @@ app.get('/', (req, res) => {
 // API Routes with /api prefix
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-console.log('Mounting /api/products...');
 app.use('/api/products', productRoutes);
 
-// Define a custom error type for better type safety
+// Custom error interface
 interface CustomError extends Error {
   status?: number;
   statusCode?: number;
   code?: string;
-  stack?: string;
 }
 
-// Global error handling middleware - Fixed TypeScript error
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((err: CustomError, req: express.Request, res: express.Response, _next: express.NextFunction): void => {
+// Global error handling middleware
+app.use((err: CustomError, req: express.Request, res: express.Response, next: express.NextFunction): void => {
   console.error('Global error handler:', err);
   
   // Handle Multer errors (file upload)

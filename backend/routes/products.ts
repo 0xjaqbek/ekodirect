@@ -1,13 +1,13 @@
 // backend/routes/products.ts - Fixed version
-import express, { type RequestHandler } from 'express';
+import express from 'express';
 import multer from 'multer';
-import { authenticateUser } from '../middleware/auth';
+import { authenticateUser } from '../middleware/auth.js';
 import { 
   productExists, 
   isProductOwner, 
   validateProductData, 
   configureProductImageUpload 
-} from '../middleware/products';
+} from '../middleware/products.js';
 import { 
   getProducts, 
   getProductById, 
@@ -15,24 +15,24 @@ import {
   updateProduct, 
   deleteProduct,
   getProductsByFarmer
-} from '../controllers/productController';
+} from '../controllers/productController.js';
 import {
   uploadProductImages,
   removeProductImage,
   setMainProductImage
-} from '../controllers/productImageController';
+} from '../controllers/productImageController.js';
 import {
   updateProductStatus,
   getProductStatusHistory,
   getProductTracking
-} from '../controllers/productStatusController';
-import { VALIDATION } from '../../src/shared/constants';
+} from '../controllers/productStatusController.js';
+import { VALIDATION } from '../../src/shared/constants/index.js';
 
 // Create a router instance
 const router = express.Router();
 
 // Configure multer storage for product images
-const storage = multer.memoryStorage(); // Store files in memory for processing
+const storage = multer.memoryStorage();
 
 // Configure multer upload with limits
 const upload = multer({
@@ -56,28 +56,21 @@ const upload = multer({
  * @route GET /api/products
  * @access Public
  */
-router.get('/', getProducts as RequestHandler);
+router.get('/', getProducts);
 
 /**
  * Get products by farmer
  * @route GET /api/products/farmer/:farmerId
  * @access Public
  */
-router.get('/farmer/:farmerId', getProductsByFarmer as RequestHandler);
+router.get('/farmer/:farmerId', getProductsByFarmer);
 
 /**
  * Get product tracking information
  * @route GET /api/products/tracking/:trackingId
  * @access Public
  */
-router.get('/tracking/:trackingId', getProductTracking as RequestHandler);
-
-/**
- * Get a single product
- * @route GET /api/products/:id
- * @access Public
- */
-router.get('/:id', productExists, getProductById as RequestHandler);
+router.get('/tracking/:trackingId', getProductTracking);
 
 /**
  * Create a new product
@@ -90,8 +83,15 @@ router.post(
   configureProductImageUpload,
   upload.array('images', VALIDATION.MAX_IMAGES_PER_PRODUCT),
   validateProductData,
-  createProduct as RequestHandler
+  createProduct
 );
+
+/**
+ * Get a single product
+ * @route GET /api/products/:id
+ * @access Public
+ */
+router.get('/:id', productExists, getProductById);
 
 /**
  * Update a product
@@ -106,7 +106,7 @@ router.put(
   configureProductImageUpload,
   upload.array('images', VALIDATION.MAX_IMAGES_PER_PRODUCT),
   validateProductData,
-  updateProduct as RequestHandler
+  updateProduct
 );
 
 /**
@@ -119,7 +119,7 @@ router.delete(
   authenticateUser, 
   productExists,
   isProductOwner,
-  deleteProduct as RequestHandler
+  deleteProduct
 );
 
 /**
@@ -134,7 +134,7 @@ router.post(
   isProductOwner,
   configureProductImageUpload,
   upload.array('images', VALIDATION.MAX_IMAGES_PER_PRODUCT),
-  uploadProductImages as RequestHandler
+  uploadProductImages
 );
 
 /**
@@ -147,7 +147,7 @@ router.delete(
   authenticateUser,
   productExists,
   isProductOwner,
-  removeProductImage as RequestHandler
+  removeProductImage
 );
 
 /**
@@ -160,7 +160,7 @@ router.put(
   authenticateUser,
   productExists,
   isProductOwner,
-  setMainProductImage as RequestHandler
+  setMainProductImage
 );
 
 /**
@@ -173,7 +173,7 @@ router.put(
   authenticateUser,
   productExists,
   isProductOwner,
-  updateProductStatus as RequestHandler
+  updateProductStatus
 );
 
 /**
@@ -185,7 +185,7 @@ router.get(
   '/:id/status/history',
   authenticateUser,
   productExists,
-  getProductStatusHistory as RequestHandler
+  getProductStatusHistory
 );
 
 export default router;

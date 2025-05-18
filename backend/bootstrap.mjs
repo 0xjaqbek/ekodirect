@@ -1,4 +1,10 @@
-// bootstrap.mjs
+// bootstrap.mjs - Fixed version
 import 'dotenv/config';
-import 'ts-node/esm'; // Register ts-node with ESM loader
-import './server.mts'; // Or './server.mts' if renamed
+import { register } from 'node:module';
+import { pathToFileURL } from 'node:url';
+
+// Register ts-node with ESM loader using the new approach
+register('ts-node/esm', pathToFileURL('./'));
+
+// Import the main server file
+import('./server.mts');
