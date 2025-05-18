@@ -1,7 +1,7 @@
-// backend/controllers/productImageController.ts - Fixed version
+// backend/controllers/productImageController.ts - Fixed version with correct imports
 import { Request, Response } from 'express';
 import { admin } from '../firebase';
-import { VALIDATION } from '../../src/shared/constants';
+import { VALIDATION } from '../constants';
 
 // Initialize Firestore
 const db = admin.firestore();

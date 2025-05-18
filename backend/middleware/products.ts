@@ -1,7 +1,7 @@
-// backend/middleware/products.ts - Fixed version
+// backend/middleware/products.ts - Fixed version with correct imports
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
-import { VALIDATION } from '../../src/shared/constants';
+import { VALIDATION } from '../constants';
 import { productsCollection } from '../models/collections';
 import type { FirestoreProduct } from '../types';
 

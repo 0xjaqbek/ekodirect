@@ -1,13 +1,13 @@
-// backend/routes/products.ts - Fixed version
+// backend/routes/products.ts - Fixed version with correct imports
 import express from 'express';
 import multer from 'multer';
-import { authenticateUser } from '../middleware/auth.js';
+import { authenticateUser } from '../middleware/auth';
 import { 
   productExists, 
   isProductOwner, 
   validateProductData, 
   configureProductImageUpload 
-} from '../middleware/products.js';
+} from '../middleware/products';
 import { 
   getProducts, 
   getProductById, 
@@ -15,18 +15,18 @@ import {
   updateProduct, 
   deleteProduct,
   getProductsByFarmer
-} from '../controllers/productController.js';
+} from '../controllers/productController';
 import {
   uploadProductImages,
   removeProductImage,
   setMainProductImage
-} from '../controllers/productImageController.js';
+} from '../controllers/productImageController';
 import {
   updateProductStatus,
   getProductStatusHistory,
   getProductTracking
-} from '../controllers/productStatusController.js';
-import { VALIDATION } from '../../src/shared/constants/index.js';
+} from '../controllers/productStatusController';
+import { VALIDATION } from '../constants';
 
 // Create a router instance
 const router = express.Router();
