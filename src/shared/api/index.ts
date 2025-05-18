@@ -1,15 +1,7 @@
-// Updated src/shared/api/index.ts with improved RequestParams type
+// Updated src/shared/api/index.ts with removed unused import
 
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { STORAGE_KEYS } from '../constants';
-
-// Define ApiResponse type locally to avoid import issues
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
 
 // Define type for error response data
 interface ErrorResponseData {
@@ -19,6 +11,9 @@ interface ErrorResponseData {
 
 // Define Request Parameters type with explicit allowed types
 export type RequestParams = Record<string, string | number | boolean | undefined | null>;
+
+// Re-export ApiResponse from shared types to maintain compatibility
+export type { ApiResponse } from '../types';
 
 // Konfiguracja API
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -107,7 +102,7 @@ axiosInstance.interceptors.response.use(
     }
     
     // Tworzenie standardowej odpowiedzi błędu
-    const formattedError: ApiResponse<null> = {
+    const formattedError = {
       success: false,
       error: errorMessage
     };
@@ -121,67 +116,67 @@ export const apiClient = {
   /**
    * Wykonaj żądanie GET
    */
-  get: async <T>(url: string, params?: RequestParams): Promise<ApiResponse<T>> => {
+  get: async <T>(url: string, params?: RequestParams): Promise<import('../types').ApiResponse<T>> => {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.get(url, { params });
+      const response: AxiosResponse<import('../types').ApiResponse<T>> = await axiosInstance.get(url, { params });
       return response.data;
     } catch (error) {
       if (error instanceof Error) {
         return { success: false, error: error.message };
       }
-      return error as ApiResponse<T>;
+      return error as import('../types').ApiResponse<T>;
     }
   },
   
   /**
    * Wykonaj żądanie POST
    */
-  post: async <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+  post: async <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<import('../types').ApiResponse<T>> => {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.post(url, data, config);
+      const response: AxiosResponse<import('../types').ApiResponse<T>> = await axiosInstance.post(url, data, config);
       return response.data;
     } catch (error) {
       if (error instanceof Error) {
         return { success: false, error: error.message };
       }
-      return error as ApiResponse<T>;
+      return error as import('../types').ApiResponse<T>;
     }
   },
   
   /**
    * Wykonaj żądanie PUT
    */
-  put: async <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+  put: async <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<import('../types').ApiResponse<T>> => {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.put(url, data, config);
+      const response: AxiosResponse<import('../types').ApiResponse<T>> = await axiosInstance.put(url, data, config);
       return response.data;
     } catch (error) {
       if (error instanceof Error) {
         return { success: false, error: error.message };
       }
-      return error as ApiResponse<T>;
+      return error as import('../types').ApiResponse<T>;
     }
   },
   
   /**
    * Wykonaj żądanie DELETE
    */
-  delete: async <T>(url: string): Promise<ApiResponse<T>> => {
+  delete: async <T>(url: string): Promise<import('../types').ApiResponse<T>> => {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.delete(url);
+      const response: AxiosResponse<import('../types').ApiResponse<T>> = await axiosInstance.delete(url);
       return response.data;
     } catch (error) {
       if (error instanceof Error) {
         return { success: false, error: error.message };
       }
-      return error as ApiResponse<T>;
+      return error as import('../types').ApiResponse<T>;
     }
   },
   
   /**
    * Wyślij plik z multipart/form-data
    */
-  uploadFile: async <T>(url: string, file: File, fieldName = 'file', data?: Record<string, unknown>): Promise<ApiResponse<T>> => {
+  uploadFile: async <T>(url: string, file: File, fieldName = 'file', data?: Record<string, unknown>): Promise<import('../types').ApiResponse<T>> => {
     try {
       const formData = new FormData();
       formData.append(fieldName, file);
@@ -193,7 +188,7 @@ export const apiClient = {
         });
       }
       
-      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.post(url, formData, {
+      const response: AxiosResponse<import('../types').ApiResponse<T>> = await axiosInstance.post(url, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -204,14 +199,14 @@ export const apiClient = {
       if (error instanceof Error) {
         return { success: false, error: error.message };
       }
-      return error as ApiResponse<T>;
+      return error as import('../types').ApiResponse<T>;
     }
   },
   
   /**
    * Wyślij wiele plików z multipart/form-data
    */
-  uploadFiles: async <T>(url: string, files: File[], fieldName = 'files', data?: Record<string, unknown>): Promise<ApiResponse<T>> => {
+  uploadFiles: async <T>(url: string, files: File[], fieldName = 'files', data?: Record<string, unknown>): Promise<import('../types').ApiResponse<T>> => {
     try {
       const formData = new FormData();
       
@@ -227,7 +222,7 @@ export const apiClient = {
         });
       }
       
-      const response: AxiosResponse<ApiResponse<T>> = await axiosInstance.post(url, formData, {
+      const response: AxiosResponse<import('../types').ApiResponse<T>> = await axiosInstance.post(url, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -238,7 +233,7 @@ export const apiClient = {
       if (error instanceof Error) {
         return { success: false, error: error.message };
       }
-      return error as ApiResponse<T>;
+      return error as import('../types').ApiResponse<T>;
     }
   }
 };
