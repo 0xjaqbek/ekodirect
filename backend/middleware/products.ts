@@ -56,34 +56,42 @@ export const productExists = async (req: Request, res: Response, next: NextFunct
  * Middleware to check if user is the owner of the product
  */
 export const isProductOwner = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    // This middleware should be used after productExists
-    if (!req.productData) {
-      return res.status(500).json({
+    try {
+      // This middleware should be used after productExists
+      if (!req.productData) {
+        return res.status(500).json({
+          success: false,
+          error: 'Wewnętrzny błąd serwera - brak danych produktu'
+        });
+      }
+      
+      // Add null check for req.user
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+      }
+      
+      const userId = req.user.id;
+      
+      // Check if user is the owner
+      if (req.productData.owner !== userId && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Nie masz uprawnień do wykonania tej operacji'
+        });
+      }
+      
+      next();
+    } catch (error) {
+      console.error('Is product owner middleware error:', error);
+      res.status(500).json({
         success: false,
-        error: 'Wewnętrzny błąd serwera - brak danych produktu'
+        error: 'Wystąpił błąd podczas weryfikacji uprawnień'
       });
     }
-    
-    const userId = req.user.id;
-    
-    // Check if user is the owner
-    if (req.productData.owner !== userId && req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        error: 'Nie masz uprawnień do wykonania tej operacji'
-      });
-    }
-    
-    next();
-  } catch (error) {
-    console.error('Is product owner middleware error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas weryfikacji uprawnień'
-    });
-  }
-};
+  };
 
 /**
  * Middleware to validate product data

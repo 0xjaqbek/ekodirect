@@ -23,6 +23,14 @@ interface ProductData {
 export const uploadProductImages = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    // Add null check before accessing req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
 
     // Check if product exists
@@ -140,6 +148,14 @@ export const uploadProductImages = async (req: Request, res: Response) => {
 export const removeProductImage = async (req: Request, res: Response) => {
   try {
     const { id, imageIndex } = req.params;
+    
+    // Add null check before accessing req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
 
     // Check if product exists
@@ -230,6 +246,14 @@ export const removeProductImage = async (req: Request, res: Response) => {
 export const setMainProductImage = async (req: Request, res: Response) => {
   try {
     const { id, imageIndex } = req.params;
+    
+    // Add null check before accessing req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
 
     // Check if product exists

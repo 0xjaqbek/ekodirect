@@ -8,12 +8,8 @@ export const productSchema = z.object({
   description: z.string().min(10, 'Opis produktu musi mieć co najmniej 10 znaków').max(2000, 'Opis produktu nie może przekraczać 2000 znaków'),
   price: z.number().positive('Cena musi być liczbą dodatnią').min(0.01, 'Minimalna cena to 0.01 PLN'),
   quantity: z.number().int('Ilość musi być liczbą całkowitą').positive('Ilość musi być liczbą dodatnią'),
-  unit: z.enum(PRODUCT_UNITS, {
-    errorMap: () => ({ message: 'Wybierz prawidłową jednostkę' })
-  }),
-  category: z.enum([...PRODUCT_CATEGORIES], {
-    errorMap: () => ({ message: 'Wybierz prawidłową kategorię' })
-  }),
+  unit: z.enum(PRODUCT_UNITS),
+  category: z.enum(PRODUCT_CATEGORIES),
   subcategory: z.string().optional(),
   certificates: z.array(z.string()).optional(),
   location: z.object({

@@ -28,6 +28,7 @@ import {
 } from '../controllers/productStatusController';
 import { VALIDATION } from '../../src/shared/constants';
 
+// Create a router instance
 const router = express.Router();
 
 // Configure multer storage for product images

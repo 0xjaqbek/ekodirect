@@ -231,7 +231,13 @@ export const getProductById = async (req: Request, res: Response) => {
  */
 export const createProduct = async (req: Request, res: Response) => {
   try {
-    // Get user ID from authenticated user
+    // Add null check before accessing req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
 
     // Get form data
@@ -355,6 +361,15 @@ type ProductFirestoreUpdateData = Partial<Omit<FirestoreProduct, 'createdAt' | '
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    // Check if user is authenticated
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+    
     const userId = req.user.id;
 
     // Check if product exists
@@ -470,6 +485,15 @@ export const updateProduct = async (req: Request, res: Response) => {
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    // Check if user is authenticated
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+    
     const userId = req.user.id;
 
     // Check if product exists
@@ -485,7 +509,7 @@ export const deleteProduct = async (req: Request, res: Response) => {
       });
     }
     
-    // Check if user is the owner or admin
+    // Now we know req.user exists, so this is safe
     if (product.owner !== userId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,

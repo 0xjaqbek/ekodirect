@@ -57,6 +57,14 @@ export const updateProductStatus = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status, note } = req.body;
+    
+    // Add null check before accessing req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
     const userId = req.user.id;
 
     // Validate status

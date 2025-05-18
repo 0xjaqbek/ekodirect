@@ -1,19 +1,17 @@
 // backend/firebase.ts (Fixed version)
 import admin from 'firebase-admin';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 
-// Get current file's directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Define __dirname directly for CommonJS compatibility
+const __dirname = process.cwd() + '/backend';
 
 // Initialize Firebase
 async function initializeFirebase() {
   try {
     // Read service account file path from env or use default
     const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || 
-                               path.join(__dirname, '../serviceAccountKey.json');
+                              path.join(__dirname, '../serviceAccountKey.json');
     
     let serviceAccount;
     try {

@@ -37,6 +37,14 @@ export const userExists = async (req: Request, res: Response, next: NextFunction
  */
 export const isProfileOwner = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Add null check for req.user
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+    
     const userId = req.user.id;
     const { id } = req.params;
     

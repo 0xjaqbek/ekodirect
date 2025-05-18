@@ -2,6 +2,13 @@
 import { admin } from '../firebase';
 import { usersCollection } from './collections';
 
+// Define specific types for update operations
+type UserUpdateOperation = {
+  $push?: Record<string, unknown>;
+  $pull?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 /**
  * User model that provides Mongoose-like methods for Firestore
  */
@@ -72,20 +79,20 @@ export class User {
   /**
    * Find a user by ID and update it
    */
-  static async findByIdAndUpdate(id: string, update: any): Promise<User | null> {
+  static async findByIdAndUpdate(id: string, update: UserUpdateOperation): Promise<User | null> {
     // Handle array operations for MongoDB compatibility
-    const processedUpdate: Record<string, any> = {};
+    const processedUpdate: Record<string, unknown> = {};
     
     // Process the update object to handle $push, $pull, etc.
     Object.entries(update).forEach(([key, value]) => {
       if (key === '$push') {
         // Handle $push operator - in Firestore, use arrayUnion
-        Object.entries(value as Record<string, any>).forEach(([field, fieldValue]) => {
+        Object.entries(value as Record<string, unknown>).forEach(([field, fieldValue]) => {
           processedUpdate[field] = admin.firestore.FieldValue.arrayUnion(fieldValue);
         });
       } else if (key === '$pull') {
         // Handle $pull operator - in Firestore, use arrayRemove
-        Object.entries(value as Record<string, any>).forEach(([field, fieldValue]) => {
+        Object.entries(value as Record<string, unknown>).forEach(([field, fieldValue]) => {
           processedUpdate[field] = admin.firestore.FieldValue.arrayRemove(fieldValue);
         });
       } else {
@@ -133,8 +140,9 @@ export class User {
   /**
    * Convert to Firestore-friendly object (without methods)
    */
-  private toFirestore(): Record<string, any> {
-    // Filter out _id and functions
+  private toFirestore(): Record<string, unknown> {
+    // Fix the unused _id warning using destructuring with rest operator
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _id, ...data } = this;
     return data;
   }

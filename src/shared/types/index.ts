@@ -1,5 +1,5 @@
 // shared/types/index.ts
-
+import { type ProductUnit, type ProductCategory } from '../constants';
 // Podstawowe interfejsy
 export interface User {
     _id: string;
@@ -27,8 +27,8 @@ export interface User {
     description: string;
     price: number;
     quantity: number;
-    unit: string; // kg, szt, etc.
-    category: string;
+    unit: ProductUnit;  // kg, szt, etc.
+    category: ProductCategory;
     subcategory?: string;
     owner: string; // referencja do User (rolnik)
     images: string[]; // URL-e do zdjęć
