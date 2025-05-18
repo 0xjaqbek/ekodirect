@@ -1,4 +1,4 @@
-// backend/middleware/auth.ts
+// backend/middleware/auth.ts - Fixed version
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { usersCollection } from '../models/collections';

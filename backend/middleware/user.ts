@@ -1,4 +1,4 @@
-// backend/middleware/user.ts
+// backend/middleware/user.ts - Fixed version
 import { Request, Response, NextFunction } from 'express';
 import { admin } from '../firebase';
 
@@ -8,7 +8,7 @@ const usersCollection = db.collection('users');
 /**
  * Middleware sprawdzające czy użytkownik istnieje
  */
-export const userExists = async (req: Request, res: Response, next: NextFunction) => {
+export const userExists = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
     
@@ -16,10 +16,11 @@ export const userExists = async (req: Request, res: Response, next: NextFunction
     const userDoc = await usersCollection.doc(id).get();
     
     if (!userDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Użytkownik nie istnieje'
       });
+      return;
     }
     
     next();
@@ -35,24 +36,26 @@ export const userExists = async (req: Request, res: Response, next: NextFunction
 /**
  * Middleware sprawdzające czy użytkownik jest właścicielem profilu
  */
-export const isProfileOwner = async (req: Request, res: Response, next: NextFunction) => {
+export const isProfileOwner = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // Add null check for req.user
     if (!req.user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
+      return;
     }
     
     const userId = req.user.id;
     const { id } = req.params;
     
     if (userId !== id) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Brak uprawnień do wykonania tej operacji'
       });
+      return;
     }
     
     next();

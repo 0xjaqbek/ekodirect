@@ -1,14 +1,13 @@
-// backend/middleware/products.ts
+// backend/middleware/products.ts - Fixed version
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { VALIDATION } from '../../src/shared/constants';
 import { productsCollection } from '../models/collections';
-import type { FirestoreProduct } from '../types'; // Import the product type
+import type { FirestoreProduct } from '../types';
 
 // Extend Express Request type using module augmentation
 declare module 'express' {
   interface Request {
-    // Replace 'any' with a proper type
     productData?: FirestoreProduct;
     productId?: string;
     productImageUpload?: multer.Multer;
@@ -18,145 +17,146 @@ declare module 'express' {
 /**
  * Middleware to check if a product exists
  */
-export const productExists = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      
-      // Check if product exists
-      const productDoc = await productsCollection.doc(id).get();
-      
-      if (!productDoc.exists) {
-        res.status(404).json({
-          success: false,
-          error: 'Produkt nie znaleziony'
-        });
-        return; // Don't return the response object
-      }
-      
-      // Add product data to request object with proper typing
-      const productData = productDoc.data();
-      req.productData = {
-        _id: id,
-        ...productData
-      } as FirestoreProduct;
-      req.productId = id;
-      
-      next();
-    } catch (error) {
-      console.error('Product exists middleware error:', error);
-      res.status(500).json({
+export const productExists = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    // Check if product exists
+    const productDoc = await productsCollection.doc(id).get();
+    
+    if (!productDoc.exists) {
+      res.status(404).json({
         success: false,
-        error: 'Wystąpił błąd podczas weryfikacji produktu'
+        error: 'Produkt nie znaleziony'
       });
-      // No return statement needed here as it's the end of the function
+      return;
     }
-  };
+    
+    // Add product data to request object with proper typing
+    const productData = productDoc.data();
+    req.productData = {
+      _id: id,
+      ...productData
+    } as FirestoreProduct;
+    req.productId = id;
+    
+    next();
+  } catch (error) {
+    console.error('Product exists middleware error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Wystąpił błąd podczas weryfikacji produktu'
+    });
+  }
+};
 
 /**
  * Middleware to check if user is the owner of the product
  */
-export const isProductOwner = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // This middleware should be used after productExists
-      if (!req.productData) {
-        return res.status(500).json({
-          success: false,
-          error: 'Wewnętrzny błąd serwera - brak danych produktu'
-        });
-      }
-      
-      // Add null check for req.user
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-      }
-      
-      const userId = req.user.id;
-      
-      // Check if user is the owner
-      if (req.productData.owner !== userId && req.user.role !== 'admin') {
-        return res.status(403).json({
-          success: false,
-          error: 'Nie masz uprawnień do wykonania tej operacji'
-        });
-      }
-      
-      next();
-    } catch (error) {
-      console.error('Is product owner middleware error:', error);
+export const isProductOwner = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    // This middleware should be used after productExists
+    if (!req.productData) {
       res.status(500).json({
         success: false,
-        error: 'Wystąpił błąd podczas weryfikacji uprawnień'
+        error: 'Wewnętrzny błąd serwera - brak danych produktu'
       });
+      return;
     }
-  };
+    
+    // Add null check for req.user
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+      return;
+    }
+    
+    const userId = req.user.id;
+    
+    // Check if user is the owner
+    if (req.productData.owner !== userId && req.user.role !== 'admin') {
+      res.status(403).json({
+        success: false,
+        error: 'Nie masz uprawnień do wykonania tej operacji'
+      });
+      return;
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Is product owner middleware error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Wystąpił błąd podczas weryfikacji uprawnień'
+    });
+  }
+};
 
 /**
  * Middleware to validate product data
  */
-export const validateProductData = (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { name, description, price, quantity, unit, category } = req.body;
-      
-      // Required fields
-      if (!name || !description || !price || !quantity || !unit || !category) {
-        res.status(400).json({
-          success: false,
-          error: 'Brakujące wymagane pola'
-        });
-        return; // Just return, don't return the response
-      }
-      
-      // Name validation
-      if (name.length < 3 || name.length > 100) {
-        res.status(400).json({
-          success: false,
-          error: 'Nazwa produktu musi mieć od 3 do 100 znaków'
-        });
-        return; // Just return, don't return the response
-      }
-      
-      // Description validation
-      if (description.length < 10 || description.length > 2000) {
-        res.status(400).json({
-          success: false,
-          error: 'Opis produktu musi mieć od 10 do 2000 znaków'
-        });
-        return; // Just return, don't return the response
-      }
-      
-      // Price validation
-      const priceNumber = parseFloat(price);
-      if (isNaN(priceNumber) || priceNumber <= 0) {
-        res.status(400).json({
-          success: false,
-          error: 'Cena musi być liczbą dodatnią'
-        });
-        return; // Just return, don't return the response
-      }
-      
-      // Quantity validation
-      const quantityNumber = parseInt(quantity, 10);
-      if (isNaN(quantityNumber) || quantityNumber <= 0) {
-        res.status(400).json({
-          success: false,
-          error: 'Ilość musi być liczbą całkowitą dodatnią'
-        });
-        return; // Just return, don't return the response
-      }
-      
-      next();
-    } catch (error) {
-      console.error('Validate product data middleware error:', error);
-      res.status(500).json({
+export const validateProductData = (req: Request, res: Response, next: NextFunction): void => {
+  try {
+    const { name, description, price, quantity, unit, category } = req.body;
+    
+    // Required fields
+    if (!name || !description || !price || !quantity || !unit || !category) {
+      res.status(400).json({
         success: false,
-        error: 'Wystąpił błąd podczas walidacji danych produktu'
+        error: 'Brakujące wymagane pola'
       });
-      // No return needed here as it's the end of the function
+      return;
     }
-  };
+    
+    // Name validation
+    if (name.length < 3 || name.length > 100) {
+      res.status(400).json({
+        success: false,
+        error: 'Nazwa produktu musi mieć od 3 do 100 znaków'
+      });
+      return;
+    }
+    
+    // Description validation
+    if (description.length < 10 || description.length > 2000) {
+      res.status(400).json({
+        success: false,
+        error: 'Opis produktu musi mieć od 10 do 2000 znaków'
+      });
+      return;
+    }
+    
+    // Price validation
+    const priceNumber = parseFloat(price);
+    if (isNaN(priceNumber) || priceNumber <= 0) {
+      res.status(400).json({
+        success: false,
+        error: 'Cena musi być liczbą dodatnią'
+      });
+      return;
+    }
+    
+    // Quantity validation
+    const quantityNumber = parseInt(quantity, 10);
+    if (isNaN(quantityNumber) || quantityNumber <= 0) {
+      res.status(400).json({
+        success: false,
+        error: 'Ilość musi być liczbą całkowitą dodatnią'
+      });
+      return;
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Validate product data middleware error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Wystąpił błąd podczas walidacji danych produktu'
+    });
+  }
+};
 
 // Configure storage for multer
 const storage = multer.memoryStorage();
@@ -164,7 +164,7 @@ const storage = multer.memoryStorage();
 /**
  * Middleware to configure image upload for products
  */
-export const configureProductImageUpload = (req: Request, res: Response, next: NextFunction) => {
+export const configureProductImageUpload = (req: Request, res: Response, next: NextFunction): void => {
   try {
     // Add product image upload configuration
     const upload = multer({
