@@ -1,7 +1,7 @@
 // Fixed version of backend/models/Product.ts
 
 import { admin } from '../firebase';
-import { FirestoreProduct, ProductOwner, FirestoreTimestamp } from '../types';
+import { FirestoreProduct, ProductOwner, FirestoreStatusHistoryItem } from '../types';
 import { usersCollection } from './collections';
 
 const db = admin.firestore();
@@ -190,12 +190,12 @@ class ProductQueryBuilder {
   /**
    * Helper method to convert FirestoreTimestamp or any date-like value to JavaScript Date
    */
-  private toJsDate(value: Date | FirestoreTimestamp | string | number | undefined): Date {
+  private toJsDate(value: Date | admin.firestore.Timestamp | string | number | undefined): Date {
     if (!value) return new Date();
     
     // Handle Firebase Timestamp objects with type checking
     if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-      return (value as FirestoreTimestamp).toDate();
+      return (value as admin.firestore.Timestamp).toDate();
     }
     
     // Handle Date objects
@@ -263,12 +263,7 @@ export class Product {
   images: string[] = [];
   certificates?: string[];
   status: string;
-  statusHistory?: Array<{
-    status: string;
-    timestamp: Date;  // Ensure this is Date only, not FirestoreTimestamp
-    updatedBy: string;
-    note?: string;
-  }>;
+  statusHistory?: FirestoreStatusHistoryItem[];
   location?: {
     type: string;
     coordinates: [number, number];

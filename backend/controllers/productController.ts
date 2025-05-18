@@ -1,4 +1,4 @@
-// backend/controllers/productController.ts - Fixed version with proper return types
+// backend/controllers/productController.ts - Fixed imports
 import { Request, Response } from 'express';
 import { admin } from '../firebase';
 import { calculateDistance } from '../utils/geoUtils';
