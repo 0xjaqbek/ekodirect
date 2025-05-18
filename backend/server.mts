@@ -1,15 +1,10 @@
-// backend/server.mts - Fixed version
+// backend/server.mts - Debug version
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
 // Import Firebase initialization (this needs to be imported early)
 import './firebase.js';
-
-// Import routes
-import authRoutes from './routes/auth.js';
-import userRoutes from './routes/users.js';
-import productRoutes from './routes/products.js';
 
 // Initialize environment variables
 dotenv.config();
@@ -36,10 +31,38 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes with /api prefix
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/products', productRoutes);
+// Test route to verify basic functionality
+app.get('/test', (req, res) => {
+  res.json({ message: 'Test route works' });
+});
+
+// Try importing routes one by one to identify the problematic one
+try {
+  console.log('Importing auth routes...');
+  const authRoutes = await import('./routes/auth.js');
+  app.use('/api/auth', authRoutes.default);
+  console.log('Auth routes loaded successfully');
+} catch (error) {
+  console.error('Error loading auth routes:', error);
+}
+
+try {
+  console.log('Importing user routes...');
+  const userRoutes = await import('./routes/users.js');
+  app.use('/api/users', userRoutes.default);
+  console.log('User routes loaded successfully');
+} catch (error) {
+  console.error('Error loading user routes:', error);
+}
+
+try {
+  console.log('Importing product routes...');
+  const productRoutes = await import('./routes/products.js');
+  app.use('/api/products', productRoutes.default);
+  console.log('Product routes loaded successfully');
+} catch (error) {
+  console.error('Error loading product routes:', error);
+}
 
 // Custom error interface
 interface CustomError extends Error {
@@ -87,6 +110,7 @@ app.use('*', (req: express.Request, res: express.Response) => {
     error: `Route ${req.originalUrl} not found`,
     availableRoutes: [
       'GET /',
+      'GET /test',
       'POST /api/auth/register',
       'POST /api/auth/login',
       'POST /api/auth/refresh-token',

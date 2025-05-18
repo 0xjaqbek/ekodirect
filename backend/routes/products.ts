@@ -59,20 +59,6 @@ const upload = multer({
 router.get('/', getProducts);
 
 /**
- * Get products by farmer
- * @route GET /api/products/farmer/:farmerId
- * @access Public
- */
-router.get('/farmer/:farmerId', getProductsByFarmer);
-
-/**
- * Get product tracking information
- * @route GET /api/products/tracking/:trackingId
- * @access Public
- */
-router.get('/tracking/:trackingId', getProductTracking);
-
-/**
  * Create a new product
  * @route POST /api/products
  * @access Private (Farmers only)
@@ -85,6 +71,20 @@ router.post(
   validateProductData,
   createProduct
 );
+
+/**
+ * Get products by farmer
+ * @route GET /api/products/farmer/:farmerId
+ * @access Public
+ */
+router.get('/farmer/:farmerId', getProductsByFarmer);
+
+/**
+ * Get product tracking information
+ * @route GET /api/products/tracking/:trackingId
+ * @access Public
+ */
+router.get('/tracking/:trackingId', getProductTracking);
 
 /**
  * Get a single product
