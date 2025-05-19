@@ -1,5 +1,5 @@
 // src/modules/products/types/index.ts
-import { type User, type GeoLocation, type StatusHistoryItem } from '../../../shared/types';
+import {  type GeoLocation, type StatusHistoryItem } from '../../../shared/types';
 
 // Define a type for a populated owner object
 export interface ProductOwner {
@@ -7,7 +7,7 @@ export interface ProductOwner {
   fullName: string;
   email?: string;
   profileImage?: string;
-  [key: string]: any; // Allow other properties
+
 }
 
 // Define the Product interface with proper owner handling
