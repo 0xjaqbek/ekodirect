@@ -1,4 +1,4 @@
-// backend/routes/auth.ts
+// backend/routes/auth.ts (Fixed version)
 import express from 'express';
 import {
   register,
@@ -7,7 +7,7 @@ import {
   verifyEmail,
   requestPasswordReset,
   resetPassword
-} from '../controllers/authController.js';
+} from '../controllers/authController';
 
 const router = express.Router();
 

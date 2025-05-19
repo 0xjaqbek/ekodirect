@@ -1,7 +1,7 @@
-// backend/routes/users.ts
+// backend/routes/users.ts (Fixed version)
 import express, { type RequestHandler } from 'express';
-import { authenticateUser } from '../middleware/auth.js';
-import { userExists, isProfileOwner } from '../middleware/user.js';
+import { authenticateUser } from '../middleware/auth';
+import { userExists } from '../middleware/user';
 
 const router = express.Router();
 

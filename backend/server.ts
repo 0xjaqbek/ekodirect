@@ -1,4 +1,4 @@
-// server.ts
+// backend/server.ts (Fixed version)
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -9,7 +9,7 @@ dotenv.config();
 // Initialize Firebase before importing routes
 import './firebase';
 
-// Import routes (use .js for compiled output, TypeScript will handle .ts files)
+// Import routes (use TypeScript imports without .js extension)
 import authRoutes from './routes/auth';
 import productRoutes from './routes/products';
 import userRoutes from './routes/users';

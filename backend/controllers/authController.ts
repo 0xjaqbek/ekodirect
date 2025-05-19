@@ -1,4 +1,4 @@
-// backend/controllers/authController.ts
+// backend/controllers/authController.ts (Fixed version)
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
@@ -19,7 +19,7 @@ const JWT_REFRESH_EXPIRES_IN = '7d';
 /**
  * Register a new user
  */
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password, fullName, role, phoneNumber, location } = req.body;
 
@@ -27,10 +27,11 @@ export const register = async (req: Request, res: Response) => {
     const userSnapshot = await usersCollection.where('email', '==', email).get();
     
     if (!userSnapshot.empty) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Użytkownik z tym adresem email już istnieje'
       });
+      return;
     }
 
     // Create password hash
@@ -101,7 +102,7 @@ export const register = async (req: Request, res: Response) => {
 /**
  * Login user and return JWT token
  */
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
@@ -109,10 +110,11 @@ export const login = async (req: Request, res: Response) => {
     const userSnapshot = await usersCollection.where('email', '==', email).get();
     
     if (userSnapshot.empty) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Nieprawidłowy email lub hasło'
       });
+      return;
     }
 
     // Get user data
@@ -123,18 +125,20 @@ export const login = async (req: Request, res: Response) => {
     const isPasswordValid = await bcrypt.compare(password, userData.passwordHash);
     
     if (!isPasswordValid) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Nieprawidłowy email lub hasło'
       });
+      return;
     }
 
     // Check if email is verified
     if (!userData.isVerified) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Konto nie zostało zweryfikowane. Sprawdź swoją skrzynkę email.'
       });
+      return;
     }
 
     // Generate JWT token
@@ -196,15 +200,16 @@ export const login = async (req: Request, res: Response) => {
 /**
  * Refresh JWT token using refresh token
  */
-export const refreshToken = async (req: Request, res: Response) => {
+export const refreshToken = async (req: Request, res: Response): Promise<void> => {
   try {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Brak tokenu odświeżającego'
       });
+      return;
     }
 
     // Verify refresh token
@@ -212,10 +217,11 @@ export const refreshToken = async (req: Request, res: Response) => {
     try {
       decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { userId: string };
     } catch {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Nieprawidłowy lub wygasły token odświeżający'
       });
+      return;
     }
 
     // Check if token exists in database
@@ -225,10 +231,11 @@ export const refreshToken = async (req: Request, res: Response) => {
       .get();
 
     if (tokenSnapshot.empty) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Token odświeżający nie istnieje lub wygasł'
       });
+      return;
     }
 
     const tokenDoc = tokenSnapshot.docs[0];
@@ -237,20 +244,22 @@ export const refreshToken = async (req: Request, res: Response) => {
     // Check if token is expired
     if (tokenData.expiresAt.toDate() < new Date()) {
       await tokenDoc.ref.delete();
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Token odświeżający wygasł'
       });
+      return;
     }
 
     // Get user from database
     const userDoc = await usersCollection.doc(decoded.userId).get();
     
     if (!userDoc.exists) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Użytkownik nie istnieje'
       });
+      return;
     }
 
     // Generate new JWT token
@@ -299,15 +308,16 @@ export const refreshToken = async (req: Request, res: Response) => {
 /**
  * Verify email with token
  */
-export const verifyEmail = async (req: Request, res: Response) => {
+export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
   try {
     const { token } = req.body;
 
     if (!token) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Brak tokenu weryfikacyjnego'
       });
+      return;
     }
 
     // Find token in database
@@ -317,10 +327,11 @@ export const verifyEmail = async (req: Request, res: Response) => {
       .get();
 
     if (tokenSnapshot.empty) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Nieprawidłowy lub wygasły token weryfikacyjny'
       });
+      return;
     }
 
     const tokenDoc = tokenSnapshot.docs[0];
@@ -329,20 +340,22 @@ export const verifyEmail = async (req: Request, res: Response) => {
     // Check if token is expired
     if (tokenData.expiresAt.toDate() < new Date()) {
       await tokenDoc.ref.delete();
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Token weryfikacyjny wygasł'
       });
+      return;
     }
 
     // Find user and update verification status
     const userDoc = await usersCollection.doc(tokenData.user).get();
     
     if (!userDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Użytkownik nie istnieje'
       });
+      return;
     }
 
     // Update verification status
@@ -374,7 +387,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
 /**
  * Request password reset
  */
-export const requestPasswordReset = async (req: Request, res: Response) => {
+export const requestPasswordReset = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
 
@@ -383,13 +396,14 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     
     // Don't reveal if user exists for security reasons
     if (userSnapshot.empty) {
-      return res.json({
+      res.json({
         success: true,
         data: {
           sent: true
         },
         message: 'Jeśli konto o podanym adresie email istnieje, na skrzynkę pocztową zostanie wysłany link do resetowania hasła.'
       });
+      return;
     }
 
     const userDoc = userSnapshot.docs[0];
@@ -432,15 +446,16 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
 /**
  * Reset password with token
  */
-export const resetPassword = async (req: Request, res: Response) => {
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { token, newPassword } = req.body;
 
     if (!token || !newPassword) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Brak tokenu lub nowego hasła'
       });
+      return;
     }
 
     // Find token in database
@@ -450,10 +465,11 @@ export const resetPassword = async (req: Request, res: Response) => {
       .get();
 
     if (tokenSnapshot.empty) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Nieprawidłowy lub wygasły token resetowania hasła'
       });
+      return;
     }
 
     const tokenDoc = tokenSnapshot.docs[0];
@@ -462,20 +478,22 @@ export const resetPassword = async (req: Request, res: Response) => {
     // Check if token is expired
     if (tokenData.expiresAt.toDate() < new Date()) {
       await tokenDoc.ref.delete();
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Token resetowania hasła wygasł'
       });
+      return;
     }
 
     // Find user
     const userDoc = await usersCollection.doc(tokenData.user).get();
     
     if (!userDoc.exists) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Użytkownik nie istnieje'
       });
+      return;
     }
 
     // Create new password hash
