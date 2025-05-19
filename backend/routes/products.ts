@@ -1,4 +1,4 @@
-// backend/routes/products.ts - Fixed version
+// backend/routes/products.ts - Fixed version with proper route patterns
 import express, { type RequestHandler } from 'express';
 import multer from 'multer';
 import { authenticateUser } from '../middleware/auth';
@@ -73,13 +73,6 @@ router.get('/farmer/:farmerId', getProductsByFarmer as RequestHandler);
 router.get('/tracking/:trackingId', getProductTracking as RequestHandler);
 
 /**
- * Get a single product
- * @route GET /api/products/:id
- * @access Public
- */
-router.get('/:id', productExists, getProductById as RequestHandler);
-
-/**
  * Create a new product
  * @route POST /api/products
  * @access Private (Farmers only)
@@ -92,6 +85,13 @@ router.post(
   validateProductData,
   createProduct as RequestHandler
 );
+
+/**
+ * Get a single product
+ * @route GET /api/products/:id
+ * @access Public
+ */
+router.get('/:id', productExists, getProductById as RequestHandler);
 
 /**
  * Update a product
