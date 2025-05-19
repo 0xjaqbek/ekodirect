@@ -1,6 +1,13 @@
 // src/modules/products/utils/filterUtils.ts
-import { type ProductFilterParams } from '../../../shared/types';
-import { APP_SETTINGS, PRODUCT_CATEGORIES } from '../../../shared/constants';
+import { type ProductFilterParams, type Product } from '../../../shared/types';
+import { APP_SETTINGS, PRODUCT_CATEGORIES, type ProductCategory } from '../../../shared/constants';
+
+/**
+ * Type guard to check if a string is a valid product category
+ */
+const isValidProductCategory = (category: string): category is ProductCategory => {
+  return (PRODUCT_CATEGORIES as readonly string[]).includes(category);
+};
 
 /**
  * Convert filter parameters to URL query string
@@ -48,9 +55,9 @@ export const queryStringToFilters = (queryString: string): Partial<ProductFilter
   const maxPrice = params.get('maxPrice');
   if (maxPrice) filters.maxPrice = parseFloat(maxPrice);
   
-  // Handle category and subcategory
+  // Handle category and subcategory - fix the type error
   const category = params.get('category');
-  if (category && PRODUCT_CATEGORIES.includes(category)) {
+  if (category && isValidProductCategory(category)) {
     filters.category = category;
   }
   
@@ -148,10 +155,10 @@ export const calculateDistanceFromUserToProduct = (
  * Filter products by location radius
  */
 export const filterProductsByRadius = (
-  products: any[],
+  products: Product[],
   userLocation: [number, number],
   radius: number = APP_SETTINGS.DEFAULT_SEARCH_RADIUS_KM
-): any[] => {
+): Product[] => {
   if (!userLocation || !products || products.length === 0) {
     return products;
   }
@@ -167,7 +174,7 @@ export const filterProductsByRadius = (
     );
     
     // Add distance to product for sorting
-    product.distance = distance;
+    (product as Product & { distance: number }).distance = distance;
     
     return distance <= radius;
   });

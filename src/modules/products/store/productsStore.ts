@@ -1,6 +1,6 @@
 // src/modules/products/store/productsStore.ts
 import { create } from 'zustand';
-import { type Product, type ProductFilterParams, type ApiResponse } from '../../../shared/types';
+import { type Product, type ProductFilterParams } from '../../../shared/types';
 import apiClient from '../../../shared/api';
 import { API_ROUTES } from '../../../shared/constants';
 
@@ -36,54 +36,79 @@ const defaultFilters: ProductFilterParams = {
 
 // Create the products store with Zustand
 export const useProductsStore = create<ProductsState>((set, get) => ({
-  // Initial state
-  products: [],
-  selectedProduct: null,
-  totalProducts: 0,
-  filters: { ...defaultFilters },
-  isLoading: false,
-  error: null,
-  
-  // Fetch products with optional filter parameters
-  fetchProducts: async (params?: Partial<ProductFilterParams>) => {
-    set({ isLoading: true, error: null });
+    // Initial state
+    products: [],
+    selectedProduct: null,
+    totalProducts: 0,
+    filters: { ...defaultFilters },
+    isLoading: false,
+    error: null,
     
-    try {
-      // Combine current filters with new params
-      const currentFilters = get().filters;
-      const updatedFilters = { ...currentFilters, ...params };
+    // Helper function to transform ProductFilterParams to RequestParams
+    transformFilters: (filters: ProductFilterParams): Record<string, string | number | boolean | undefined | null> => {
+      const { location, ...otherFilters } = filters;
       
-      // Update filters in state
-      set({ filters: updatedFilters });
+      const transformed: Record<string, string | number | boolean | undefined | null> = {};
       
-      // Make API request
-      const response = await apiClient.get<{
-        items: Product[];
-        total: number;
-        page: number;
-        limit: number;
-        totalPages: number;
-      }>(API_ROUTES.PRODUCTS.LIST, updatedFilters);
+      // Copy all non-location filters
+      Object.entries(otherFilters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          transformed[key] = value;
+        }
+      });
       
-      if (response.success && response.data) {
+      // Handle location separately - convert [lng, lat] to separate parameters
+      if (location && Array.isArray(location) && location.length === 2) {
+        transformed.lng = location[0]; // longitude
+        transformed.lat = location[1]; // latitude
+      }
+      
+      return transformed;
+    },
+    
+    // Fetch products with optional filter parameters
+    fetchProducts: async (params?: Partial<ProductFilterParams>) => {
+      set({ isLoading: true, error: null });
+      
+      try {
+        // Combine current filters with new params
+        const currentFilters = get().filters;
+        const updatedFilters = { ...currentFilters, ...params };
+        
+        // Update filters in state
+        set({ filters: updatedFilters });
+        
+        // Transform filters to handle location array
+        const transformedFilters = get().transformFilters(updatedFilters);
+        
+        // Make API request
+        const response = await apiClient.get<{
+          items: Product[];
+          total: number;
+          page: number;
+          limit: number;
+          totalPages: number;
+        }>(API_ROUTES.PRODUCTS.LIST, transformedFilters);
+        
+        if (response.success && response.data) {
+          set({
+            products: response.data.items,
+            totalProducts: response.data.total,
+            isLoading: false
+          });
+        } else {
+          set({
+            error: response.error || 'Nie udało się pobrać produktów',
+            isLoading: false
+          });
+        }
+      } catch (error) {
         set({
-          products: response.data.items,
-          totalProducts: response.data.total,
-          isLoading: false
-        });
-      } else {
-        set({
-          error: response.error || 'Nie udało się pobrać produktów',
+          error: error instanceof Error ? error.message : 'Wystąpił błąd podczas pobierania produktów',
           isLoading: false
         });
       }
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Wystąpił błąd podczas pobierania produktów',
-        isLoading: false
-      });
-    }
-  },
+    },
   
   // Fetch a single product by ID
   fetchProduct: async (id: string) => {

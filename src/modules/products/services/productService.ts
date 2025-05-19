@@ -22,7 +22,9 @@ class ProductService {
     limit: number;
     totalPages: number;
   }>> {
-    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, filters);
+    // Transform filters to handle location array
+    const transformedFilters = filters ? this.transformFilters(filters) : undefined;
+    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, transformedFilters);
   }
 
   /**
@@ -40,14 +42,11 @@ class ProductService {
   }
 
   /**
-   * Create a new product with images
+   * Create a new product with images (using FormData)
    */
   async createProductWithImages(productData: FormData): Promise<ApiResponse<Product>> {
-    return await apiClient.post(API_ROUTES.PRODUCTS.LIST, productData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+    // For FormData, don't set Content-Type header - let the browser set it automatically
+    return await apiClient.post(API_ROUTES.PRODUCTS.LIST, productData);
   }
 
   /**
@@ -58,14 +57,11 @@ class ProductService {
   }
 
   /**
-   * Update a product with images
+   * Update a product with images (using FormData)
    */
   async updateProductWithImages(id: string, productData: FormData): Promise<ApiResponse<Product>> {
-    return await apiClient.put(API_ROUTES.PRODUCTS.BY_ID(id), productData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+    // For FormData, don't set Content-Type header - let the browser set it automatically
+    return await apiClient.put(API_ROUTES.PRODUCTS.BY_ID(id), productData);
   }
 
   /**
@@ -99,10 +95,9 @@ class ProductService {
     limit: number;
     totalPages: number;
   }>> {
-    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, { 
-      ...filters,
-      farmer: farmerId 
-    });
+    // Transform filters to handle location array
+    const transformedFilters = this.transformFilters({ ...filters, farmer: farmerId });
+    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, transformedFilters);
   }
 
   /**
@@ -115,10 +110,34 @@ class ProductService {
     limit: number;
     totalPages: number;
   }>> {
-    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, {
-      ...filters,
-      search: searchTerm
+    // Transform filters to handle location array
+    const transformedFilters = this.transformFilters({ ...filters, search: searchTerm });
+    return await apiClient.get(API_ROUTES.PRODUCTS.LIST, transformedFilters);
+  }
+
+  /**
+   * Transform ProductFilterParams to RequestParams
+   * Converts location array to separate lat/lng parameters
+   */
+  private transformFilters(filters: Partial<ProductFilterParams>): Record<string, string | number | boolean | undefined | null> {
+    const { location, ...otherFilters } = filters;
+    
+    const transformed: Record<string, string | number | boolean | undefined | null> = {};
+    
+    // Copy all non-location filters
+    Object.entries(otherFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        transformed[key] = value;
+      }
     });
+    
+    // Handle location separately - convert [lng, lat] to separate parameters
+    if (location && Array.isArray(location) && location.length === 2) {
+      transformed.lng = location[0]; // longitude
+      transformed.lat = location[1]; // latitude
+    }
+    
+    return transformed;
   }
 }
 
