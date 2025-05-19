@@ -1,4 +1,4 @@
-// src/modules/users/store/userProfileStore.ts (Fixed version)
+// src/modules/users/store/userProfileStore.ts - dodaj debug logi
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import apiClient from '../../../shared/api';
@@ -11,6 +11,10 @@ const normalizeUserData = (userData: FirebaseUserData | null): User | null => {
   // Handle null userData
   if (!userData) return null;
 
+  // Dodaj debug logi
+  console.log('normalizeUserData - input:', userData);
+  console.log('normalizeUserData - role from input:', userData.role);
+
   // Prepare normalized user data
   const normalizedUser: User = {
     // Ensure _id is defined (using id from Firebase or _id if it exists)
@@ -18,7 +22,7 @@ const normalizeUserData = (userData: FirebaseUserData | null): User | null => {
     email: userData.email || '',
     passwordHash: userData.passwordHash || '',
     fullName: userData.fullName || '',
-    role: userData.role || 'consumer',
+    role: userData.role || 'consumer', // UWAGA: Może być problem tutaj
     phoneNumber: userData.phoneNumber || '',
     // Ensure location has proper format
     location: {
@@ -40,6 +44,10 @@ const normalizeUserData = (userData: FirebaseUserData | null): User | null => {
     createdAt: convertFirebaseTimestampToDate(userData.createdAt) || new Date(),
     updatedAt: convertFirebaseTimestampToDate(userData.updatedAt) || new Date()
   };
+
+  // Dodaj debug logi
+  console.log('normalizeUserData - output:', normalizedUser);
+  console.log('normalizeUserData - role in output:', normalizedUser.role);
 
   return normalizedUser;
 };
@@ -105,11 +113,18 @@ export const useUserProfileStore = create<UserProfileState>()(
         set({ isLoading: true, error: null });
 
         try {
+          console.log('fetchProfile - Making API call to:', API_ROUTES.USERS.ME);
           const response = await apiClient.get<FirebaseUserData>(API_ROUTES.USERS.ME);
 
+          console.log('fetchProfile - API response:', response);
+
           if (response.success && response.data) {
+            console.log('fetchProfile - Raw data from API:', response.data);
+            
             // Normalize user data
             const normalizedUser = normalizeUserData(response.data);
+            
+            console.log('fetchProfile - Normalized user:', normalizedUser);
             
             set({
               profile: normalizedUser,
@@ -124,6 +139,7 @@ export const useUserProfileStore = create<UserProfileState>()(
             return false;
           }
         } catch (error) {
+          console.error('fetchProfile - Error:', error);
           set({
             error: error instanceof Error ? error.message : 'Błąd podczas pobierania profilu',
             isLoading: false

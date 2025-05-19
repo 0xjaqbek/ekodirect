@@ -1,11 +1,17 @@
-// src/modules/users/pages/ProfilePage.tsx
+// src/modules/users/pages/ProfilePage.tsx - dodaj debug logi
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useUserProfile } from '../hooks/useUserProfile';
+import { useAuth } from '../../auth'; // Dodaj import useAuth
 import UserProfile from '../components/UserProfile';
 
 const ProfilePage: React.FC = () => {
   const { profile, isLoading, error } = useUserProfile();
+  const { user: authUser } = useAuth(); // Dodaj to
+
+  // Dodaj debug logi
+  console.log('ProfilePage - profile from userProfileStore:', profile);
+  console.log('ProfilePage - user from authStore:', authUser);
 
   if (isLoading) {
     return (
@@ -50,20 +56,27 @@ const ProfilePage: React.FC = () => {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Twój profil</h1>
         <p className="text-gray-600">Tutaj możesz zobaczyć i edytować swoje dane profilowe.</p>
+        
+        {/* Dodaj debug info 
+        <div className="mt-2 p-2 bg-gray-100 rounded text-xs">
+          <strong>Debug:</strong> 
+          AuthStore role: {authUser?.role || 'undefined'} | 
+          ProfileStore role: {profile?.role || 'undefined'}
+        </div>  */}
       </div>
 
       <div className="space-y-6">
-        <UserProfile user={profile} isCurrentUser={true} />
+        {/* Użyj user z authStore zamiast profile */}
+        <UserProfile user={authUser || profile} isCurrentUser={true} />
         
-        {profile.role === 'farmer' && (
+        {(authUser?.role || profile?.role) === 'farmer' && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               Twoje produkty
             </h2>
             
-            {profile.createdProducts && profile.createdProducts.length > 0 ? (
+            {(authUser?.createdProducts || profile?.createdProducts) && (authUser?.createdProducts || profile?.createdProducts)!.length > 0 ? (
               <div>
-                {/* Tu będzie lista produktów rolnika */}
                 <p>Twoje produkty zostaną wyświetlone tutaj.</p>
               </div>
             ) : (
@@ -80,15 +93,14 @@ const ProfilePage: React.FC = () => {
           </div>
         )}
         
-        {profile.role === 'consumer' && (
+        {(authUser?.role || profile?.role) === 'consumer' && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               Twoje ostatnie zamówienia
             </h2>
             
-            {profile.orders && profile.orders.length > 0 ? (
+            {(authUser?.orders || profile?.orders) && (authUser?.orders || profile?.orders)!.length > 0 ? (
               <div>
-                {/* Tu będzie lista zamówień konsumenta */}
                 <p>Twoje zamówienia zostaną wyświetlone tutaj.</p>
               </div>
             ) : (
