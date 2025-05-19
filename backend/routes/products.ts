@@ -26,7 +26,7 @@ import {
   getProductStatusHistory,
   getProductTracking
 } from '../controllers/productStatusController';
-import { VALIDATION } from '../../src/shared/constants';
+import { VALIDATION } from '../shared/constants';
 
 // Create a router instance
 const router = express.Router();

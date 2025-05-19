@@ -1,4 +1,4 @@
-// Updated src/shared/api/index.ts with proper types
+// Updated src/shared/api/index.ts with environment detection
 
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { STORAGE_KEYS } from '../constants';
@@ -20,8 +20,40 @@ interface ErrorResponseData {
 // Define Request Parameters type
 export type RequestParams = Record<string, string | number | boolean | undefined | null>;
 
-// Konfiguracja API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Define interface for Vite's import.meta.env
+interface ViteImportMeta {
+  env: {
+    VITE_API_URL?: string;
+    [key: string]: string | undefined;
+  };
+}
+
+// Define interface for window with Vite's import.meta
+interface WindowWithVite extends Window {
+  import?: {
+    meta?: ViteImportMeta;
+  };
+}
+
+// Environment detection and API configuration
+const isNode = typeof process !== 'undefined' && process.env;
+const isBrowser = typeof window !== 'undefined';
+
+// Get API URL from environment variables
+const getApiUrl = (): string => {
+  if (isNode) {
+    // Node.js environment (backend)
+    return process.env.API_URL || process.env.VITE_API_URL || 'http://localhost:3001/api';
+  } else if (isBrowser && (window as WindowWithVite).import?.meta?.env) {
+    // Vite browser environment
+    return (window as WindowWithVite).import!.meta!.env.VITE_API_URL || 'http://localhost:3001/api';
+  } else {
+    // Fallback
+    return 'http://localhost:3001/api';
+  }
+};
+
+const API_BASE_URL = getApiUrl();
 const API_TIMEOUT = 15000; // 15 sekund
 
 // Domyślna konfiguracja dla instancji axios
@@ -38,12 +70,34 @@ const axiosConfig: AxiosRequestConfig = {
 const axiosInstance: AxiosInstance = axios.create(axiosConfig);
 
 /**
+ * Get storage function that works in both Node.js and browser
+ */
+const getStorageItem = (key: string): string | null => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage.getItem(key);
+  }
+  return null;
+};
+
+const setStorageItem = (key: string, value: string): void => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.setItem(key, value);
+  }
+};
+
+const removeStorageItem = (key: string): void => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.removeItem(key);
+  }
+};
+
+/**
  * Interceptor dla żądań API
  * - Dodaje nagłówek Authorization z tokenem JWT, jeśli dostępny
  */
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getStorageItem(STORAGE_KEYS.TOKEN);
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -63,8 +117,9 @@ axiosInstance.interceptors.response.use(
   async (error: AxiosError<ErrorResponseData>) => {
     const originalRequest = error.config;
     
-    // Obsługa wygaśnięcia tokenu - próba odświeżenia
+    // Obsługa wygaśnięcia tokenu - próba odświeżenia (tylko w browser)
     if (
+      typeof window !== 'undefined' &&
       error.response?.status === 401 &&
       originalRequest && 
       !(originalRequest as { _retry?: boolean })._retry &&
@@ -74,11 +129,11 @@ axiosInstance.interceptors.response.use(
       
       try {
         // Wywołanie endpointu refresh token
-        const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+        const refreshToken = getStorageItem(STORAGE_KEYS.REFRESH_TOKEN);
         const response = await axios.post<{ token: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
         
         if (response.data.token) {
-          localStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
+          setStorageItem(STORAGE_KEYS.TOKEN, response.data.token);
           
           // Ponowna próba oryginalnego żądania z nowym tokenem
           if (originalRequest.headers) {
@@ -88,12 +143,14 @@ axiosInstance.interceptors.response.use(
         }
       } catch (refreshError) {
         // Jeśli odświeżenie tokenu nie powiodło się, wyloguj użytkownika
-        localStorage.removeItem(STORAGE_KEYS.TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.USER);
-        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+        removeStorageItem(STORAGE_KEYS.TOKEN);
+        removeStorageItem(STORAGE_KEYS.USER);
+        removeStorageItem(STORAGE_KEYS.REFRESH_TOKEN);
         
-        // Przekierowanie do logowania
-        window.location.href = '/login?session=expired';
+        // Przekierowanie do logowania (tylko w browser)
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?session=expired';
+        }
         return Promise.reject(refreshError);
       }
     }

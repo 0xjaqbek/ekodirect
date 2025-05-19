@@ -43,20 +43,20 @@ export const convertToDate = (
  * Handles undefined and null values gracefully
  */
 export const safeGet = <T>(
-  obj: any, 
+  obj: Record<string, unknown> | unknown, 
   path: string, 
   defaultValue: T
 ): T => {
-  if (!obj) return defaultValue;
+  if (!obj || typeof obj !== 'object') return defaultValue;
   
   const parts = path.split('.');
-  let current = obj;
+  let current: unknown = obj;
   
   for (const part of parts) {
     if (current === null || current === undefined || typeof current !== 'object') {
       return defaultValue;
     }
-    current = current[part];
+    current = (current as Record<string, unknown>)[part];
   }
   
   return (current === undefined || current === null) ? defaultValue : current as T;
@@ -65,12 +65,12 @@ export const safeGet = <T>(
 /**
  * Type guard to check if an object is a Firebase Timestamp
  */
-export const isFirebaseTimestamp = (value: any): value is FirebaseTimestamp => {
+export const isFirebaseTimestamp = (value: unknown): value is FirebaseTimestamp => {
   return (
     typeof value === 'object' && 
     value !== null && 
     'toDate' in value && 
-    typeof value.toDate === 'function' &&
+    typeof (value as Record<string, unknown>).toDate === 'function' &&
     'seconds' in value &&
     'nanoseconds' in value
   );
