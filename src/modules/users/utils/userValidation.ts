@@ -1,6 +1,7 @@
 // src/modules/users/utils/userValidation.ts
 import { z } from 'zod';
 import { isValidPhoneNumber } from '../../../shared/utils';
+import type { User } from '../../../shared/types';
 
 // Schemat walidacji dla formularza profilu
 export const userProfileSchema = z.object({
@@ -70,7 +71,7 @@ export const formatUserData = (user: User) => {
     }),
     initials: user.fullName
       .split(' ')
-      .map((n) => n[0])
+      .map((n: string) => n[0])
       .join('')
       .toUpperCase()
       .substring(0, 2),

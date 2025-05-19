@@ -1,7 +1,6 @@
 // src/modules/users/hooks/useUserProfile.ts
 import { useEffect } from 'react';
 import { useUserProfileStore } from '../store/userProfileStore';
-import type { User } from '../../../shared/types';
 
 /**
  * Hook do zarządzania profilem użytkownika
