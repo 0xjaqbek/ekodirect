@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useUserProfile } from '../hooks/useUserProfile';
 import UserProfile from './UserProfile';
-import { calculateDistance } from '../../../shared/utils';
+import { calculateDistance, formatDistance } from '../../../shared/utils';
 import { useGeolocation } from '../../../shared/hooks';
 import type { User } from '../../../shared/types';
 
@@ -82,13 +82,34 @@ const PublicProfile: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header z informacją o odległości */}
+      {distance !== null && (
+        <div className="bg-primary-light/10 border border-primary-light/20 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-primary-dark font-medium">
+              Odległość od Twojej lokalizacji:
+            </span>
+            <span className="text-primary font-bold text-lg">
+              {formatDistance(distance)}
+            </span>
+          </div>
+        </div>
+      )}
+
       <UserProfile user={farmer} isCurrentUser={isCurrentUser} />
       
       {farmer.role === 'farmer' && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Produkty rolnika
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">
+              Produkty rolnika
+            </h2>
+            {distance !== null && (
+              <span className="text-sm text-gray-500">
+                Dostawa z odległości {formatDistance(distance)}
+              </span>
+            )}
+          </div>
           
           {/* Tu będzie lista produktów rolnika */}
           <div className="text-center py-8 text-gray-500">

@@ -9,7 +9,7 @@ import LocationSelector from './LocationSelector';
 import classNames from 'classnames';
 
 const UserProfileForm: React.FC = () => {
-  const { profile, isLoading, error, updateProfile, uploadAvatar, clearError } = useUserProfile();
+  const { profile, isLoading: profileLoading, error, updateProfile, uploadAvatar, clearError } = useUserProfile();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -96,12 +96,16 @@ const UserProfileForm: React.FC = () => {
         }
       }
 
-      // Następnie zaktualizuj profil
+      // Następnie zaktualizuj profil - dodaj pole type do lokalizacji
       const success = await updateProfile({
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         bio: data.bio,
-        location: data.location
+        location: {
+          type: 'Point',
+          coordinates: data.location.coordinates,
+          address: data.location.address
+        }
       });
 
       if (success) {
@@ -117,10 +121,14 @@ const UserProfileForm: React.FC = () => {
     }
   };
 
-  if (!profile) {
+  // Pokazuj loading state podczas ładowania profilu
+  if (profileLoading || !profile) {
     return (
       <div className="flex justify-center items-center min-h-[200px]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        {profileLoading && (
+          <span className="ml-3 text-gray-600">Ładowanie profilu...</span>
+        )}
       </div>
     );
   }
@@ -166,6 +174,7 @@ const UserProfileForm: React.FC = () => {
                   cursor-pointer"
                 accept="image/*"
                 onChange={handleAvatarChange}
+                disabled={isSubmitting}
               />
             </label>
             <p className="mt-1 text-xs text-gray-500">
@@ -186,9 +195,11 @@ const UserProfileForm: React.FC = () => {
           id="fullName"
           type="text"
           {...register('fullName')}
+          disabled={isSubmitting}
           className={classNames(
             "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary",
-            errors.fullName ? "border-red-300" : "border-gray-300"
+            errors.fullName ? "border-red-300" : "border-gray-300",
+            isSubmitting && "bg-gray-100 cursor-not-allowed"
           )}
           placeholder="Twoje imię i nazwisko"
         />
@@ -205,9 +216,11 @@ const UserProfileForm: React.FC = () => {
           id="phoneNumber"
           type="tel"
           {...register('phoneNumber')}
+          disabled={isSubmitting}
           className={classNames(
             "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary",
-            errors.phoneNumber ? "border-red-300" : "border-gray-300"
+            errors.phoneNumber ? "border-red-300" : "border-gray-300",
+            isSubmitting && "bg-gray-100 cursor-not-allowed"
           )}
           placeholder="Twój numer telefonu"
         />
@@ -224,9 +237,11 @@ const UserProfileForm: React.FC = () => {
           id="bio"
           {...register('bio')}
           rows={4}
+          disabled={isSubmitting}
           className={classNames(
             "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary",
-            errors.bio ? "border-red-300" : "border-gray-300"
+            errors.bio ? "border-red-300" : "border-gray-300",
+            isSubmitting && "bg-gray-100 cursor-not-allowed"
           )}
           placeholder="Napisz kilka słów o sobie..."
         />
