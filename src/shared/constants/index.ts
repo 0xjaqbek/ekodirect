@@ -160,3 +160,4 @@ export const APP_SETTINGS = {
     ECO_CERTIFICATE_MULTIPLIER: 0.8
   }
 };
+

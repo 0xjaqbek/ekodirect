@@ -2,7 +2,7 @@
     "compilerOptions": {
       "target": "ES2020",
       "module": "ESNext",
-      "rootDir": "./",
+      "rootDir": "../",
       "outDir": "./dist",
       "esModuleInterop": true,
       "allowSyntheticDefaultImports": true,
@@ -16,15 +16,18 @@
       "sourceMap": true,
       "noEmitOnError": true,
       "allowJs": true,
-      "baseUrl": "./",
+      "baseUrl": "../",
       "paths": {
-        "@shared/*": ["../src/shared/*"]
+        "@shared/*": ["src/shared/*"]
       }
     },
     "ts-node": {
       "esm": true,
       "experimentalSpecifierResolution": "node"
     },
-    "include": ["**/*.ts"],
-    "exclude": ["node_modules", "dist"]
+    "include": [
+      "./**/*.ts",
+      "../src/shared/**/*.ts"
+    ],
+    "exclude": ["node_modules", "dist", "../node_modules"]
   }

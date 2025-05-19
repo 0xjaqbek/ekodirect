@@ -182,12 +182,35 @@ class ProductQueryBuilder {
             }
           }
           
-          // Handle normal field sorting
+          // Handle normal field sorting with proper undefined checks
           const aValue = a[field as keyof FirestoreProduct];
           const bValue = b[field as keyof FirestoreProduct];
           
-          if (aValue < bValue) return -1 * direction;
-          if (aValue > bValue) return 1 * direction;
+          // Handle undefined values - put them at the end
+          if (aValue === undefined && bValue === undefined) {
+            continue; // Both undefined, try next field
+          }
+          if (aValue === undefined) {
+            return direction; // Put undefined at end (positive direction means a comes after b)
+          }
+          if (bValue === undefined) {
+            return -direction; // Put undefined at end
+          }
+          
+          // Now we know both values are defined, safe to compare
+          if (typeof aValue === 'number' && typeof bValue === 'number') {
+            const diff = aValue - bValue;
+            if (diff !== 0) return diff * direction;
+          } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+            const comparison = aValue.localeCompare(bValue);
+            if (comparison !== 0) return comparison * direction;
+          } else {
+            // For other types, convert to string and compare
+            const aStr = String(aValue);
+            const bStr = String(bValue);
+            const comparison = aStr.localeCompare(bStr);
+            if (comparison !== 0) return comparison * direction;
+          }
         }
         
         return 0;

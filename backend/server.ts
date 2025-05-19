@@ -1,4 +1,4 @@
-// backend/server.ts (Fixed version with proper route handling)
+// backend/server.ts (Fixed version)
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -9,7 +9,7 @@ dotenv.config();
 // Initialize Firebase before importing routes
 import './firebase';
 
-// Import routes (use default imports to avoid potential issues)
+// Import routes (use TypeScript imports without .js extension)
 import authRoutes from './routes/auth';
 import productRoutes from './routes/products';
 import userRoutes from './routes/users';
@@ -32,6 +32,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/users', userRoutes);
+
 // Main route for testing API
 app.get('/', (req: Request, res: Response) => {
   res.json({ 
@@ -51,17 +56,6 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
-// API Routes - Mount with proper ordering
-try {
-  app.use('/api/auth', authRoutes);
-  app.use('/api/products', productRoutes);
-  app.use('/api/users', userRoutes);
-  console.log('Routes mounted successfully');
-} catch (error) {
-  console.error('Error mounting routes:', error);
-  process.exit(1);
-}
-
 // 404 handler for undefined routes
 app.use('*', (req: Request, res: Response) => {
   console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
@@ -75,14 +69,6 @@ app.use('*', (req: Request, res: Response) => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.error('Global error handler:', err);
-  
-  // Handle specific error types
-  if (err.message && err.message.includes('Nieprawidłowy format pliku')) {
-    return res.status(400).json({
-      success: false,
-      error: err.message
-    });
-  }
   
   // Don't send error details in production
   const errorMessage = process.env.NODE_ENV === 'production' 
@@ -100,8 +86,4 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API available at http://localhost:${PORT}/api`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Firebase Storage Bucket: ${process.env.FIREBASE_STORAGE_BUCKET || 'Not configured'}`);
-}).on('error', (err) => {
-  console.error('Server failed to start:', err);
-  process.exit(1);
 });

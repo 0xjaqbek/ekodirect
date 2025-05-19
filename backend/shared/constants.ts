@@ -1,4 +1,6 @@
-// backend/shared/constants.ts
+// backend/shared/constants.ts - Fixed version
+
+
 
 // Re-export validation constants needed by backend
 export const VALIDATION = {
@@ -43,3 +45,5 @@ export const VALIDATION = {
     FAIR_TRADE: 'fair-trade' as const,
     OTHER: 'other' as const
   };
+
+  export * from '../../src/shared/constants';
