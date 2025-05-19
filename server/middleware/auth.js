@@ -1,6 +1,6 @@
 // server/middleware/auth.js
 import jwt from 'jsonwebtoken';
-import { admin } from '../firebase.js';
+import { admin } from '../firebase.ts';
 import { config } from '../config.js';
 
 const db = admin.firestore();

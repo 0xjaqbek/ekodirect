@@ -78,54 +78,54 @@ export const MODERATION_STATUSES = {
   REJECTED: 'rejected' as const
 };
 
-// API Routes
+// API Routes - WAŻNE: Ścieżki bez prefiksu /api ponieważ będzie dodawany przez baseURL
 export const API_ROUTES = {
   AUTH: {
-    REGISTER: '/api/auth/register',
-    LOGIN: '/api/auth/login',
-    REFRESH_TOKEN: '/api/auth/refresh-token',
-    VERIFY_EMAIL: '/api/auth/verify-email',
-    RESEND_VERIFICATION: '/api/auth/resend-verification',
-    REQUEST_PASSWORD_RESET: '/api/auth/request-password-reset',
-    RESET_PASSWORD: '/api/auth/reset-password'
+    REGISTER: '/auth/register',
+    LOGIN: '/auth/login',
+    REFRESH_TOKEN: '/auth/refresh-token',
+    VERIFY_EMAIL: '/auth/verify-email',
+    RESEND_VERIFICATION: '/auth/resend-verification',
+    REQUEST_PASSWORD_RESET: '/auth/request-password-reset',
+    RESET_PASSWORD: '/auth/reset-password'
   },
   USERS: {
-    ME: '/api/users/me',
-    BY_ID: (id: string) => `/api/users/${id}`,
-    AVATAR: '/api/users/me/avatar'
+    ME: '/users/me',
+    BY_ID: (id: string) => `/users/${id}`,
+    AVATAR: '/users/me/avatar'
   },
   PRODUCTS: {
-    LIST: '/api/products',
-    BY_ID: (id: string) => `/api/products/${id}`,
-    TRACKING: (id: string) => `/api/products/${id}/tracking`,
-    STATUS: (id: string) => `/api/products/${id}/status`,
-    IMAGES: (id: string) => `/api/products/${id}/images`
+    LIST: '/products',
+    BY_ID: (id: string) => `/products/${id}`,
+    TRACKING: (id: string) => `/products/${id}/tracking`,
+    STATUS: (id: string) => `/products/${id}/status`,
+    IMAGES: (id: string) => `/products/${id}/images`
   },
   ORDERS: {
-    LIST: '/api/orders',
-    BY_ID: (id: string) => `/api/orders/${id}`,
-    STATUS: (id: string) => `/api/orders/${id}/status`,
-    INVOICE: (id: string) => `/api/orders/${id}/invoice`
+    LIST: '/orders',
+    BY_ID: (id: string) => `/orders/${id}`,
+    STATUS: (id: string) => `/orders/${id}/status`,
+    INVOICE: (id: string) => `/orders/${id}/invoice`
   },
   REVIEWS: {
-    PRODUCT: (id: string) => `/api/reviews/product/${id}`,
-    FARMER: (id: string) => `/api/reviews/farmer/${id}`,
-    BY_ID: (id: string) => `/api/reviews/${id}`
+    PRODUCT: (id: string) => `/reviews/product/${id}`,
+    FARMER: (id: string) => `/reviews/farmer/${id}`,
+    BY_ID: (id: string) => `/reviews/${id}`
   },
   CERTIFICATES: {
-    LIST: '/api/certificates',
-    BY_ID: (id: string) => `/api/certificates/${id}`
+    LIST: '/certificates',
+    BY_ID: (id: string) => `/certificates/${id}`
   },
   GROUPS: {
-    LIST: '/api/groups',
-    NEARBY: '/api/groups/nearby',
-    BY_ID: (id: string) => `/api/groups/${id}`,
-    JOIN: (id: string) => `/api/groups/${id}/join`
+    LIST: '/groups',
+    NEARBY: '/groups/nearby',
+    BY_ID: (id: string) => `/groups/${id}`,
+    JOIN: (id: string) => `/groups/${id}/join`
   },
   PAYMENTS: {
-    CREATE_INTENT: '/api/payments/create-intent',
-    BY_ID: (id: string) => `/api/payments/${id}`,
-    WEBHOOK: '/api/payments/webhook'
+    CREATE_INTENT: '/payments/create-intent',
+    BY_ID: (id: string) => `/payments/${id}`,
+    WEBHOOK: '/payments/webhook'
   }
 };
 

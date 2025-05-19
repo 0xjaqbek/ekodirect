@@ -2,7 +2,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { admin } from '../firebase.js';
+import { admin } from '../firebase.ts';
 import { config } from '../config.js';
 
 // Initialize Firestore

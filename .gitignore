@@ -25,3 +25,4 @@ server/serviceAccountKey.json
 *.sln
 *.sw?
 backend/serviceAccountKey.json
+.env
