@@ -1,4 +1,4 @@
-// backend/controllers/authController.ts - Wersja z lepszym logowaniem
+// backend/controllers/authController.ts - Bez weryfikacji email
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { admin } from '../firebase';
 import { config } from '../config';
 import { emailService } from '../services/emailService';
+
 // Initialize Firestore
 const db = admin.firestore();
 const usersCollection = db.collection('users');
@@ -17,73 +18,25 @@ const JWT_EXPIRES_IN = '1h';
 const JWT_REFRESH_EXPIRES_IN = '7d';
 
 /**
- * Register a new user
+ * Register a new user - BEZ WERYFIKACJI EMAIL
  */
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('=== REJESTRACJA - START ===');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('Request headers:', req.headers);
 
     const { email, password, fullName, role, phoneNumber, location } = req.body;
 
-    // Detailed validation logging
-    console.log('Extracted fields:');
-    console.log('- email:', email);
-    console.log('- password:', password ? '[HIDDEN]' : 'MISSING');
-    console.log('- fullName:', fullName);
-    console.log('- role:', role);
-    console.log('- phoneNumber:', phoneNumber);
-    console.log('- location:', location);
-
     // Validate required fields
-    if (!email) {
-      console.error('Missing email');
+    if (!email || !password || !fullName || !role || !phoneNumber) {
       res.status(400).json({
         success: false,
-        error: 'Email jest wymagany'
-      });
-      return;
-    }
-
-    if (!password) {
-      console.error('Missing password');
-      res.status(400).json({
-        success: false,
-        error: 'Hasło jest wymagane'
-      });
-      return;
-    }
-
-    if (!fullName) {
-      console.error('Missing fullName');
-      res.status(400).json({
-        success: false,
-        error: 'Imię i nazwisko jest wymagane'
-      });
-      return;
-    }
-
-    if (!role) {
-      console.error('Missing role');
-      res.status(400).json({
-        success: false,
-        error: 'Rola jest wymagana'
-      });
-      return;
-    }
-
-    if (!phoneNumber) {
-      console.error('Missing phoneNumber');
-      res.status(400).json({
-        success: false,
-        error: 'Numer telefonu jest wymagany'
+        error: 'Wszystkie pola są wymagane'
       });
       return;
     }
 
     if (!location || !location.coordinates || !location.address) {
-      console.error('Missing or invalid location:', location);
       res.status(400).json({
         success: false,
         error: 'Lokalizacja jest wymagana'
@@ -91,14 +44,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    console.log('Wszystkie pola przeszły walidację');
-
     // Check if user with this email already exists
-    console.log('Sprawdzam czy użytkownik z emailem już istnieje...');
     const userSnapshot = await usersCollection.where('email', '==', email).get();
     
     if (!userSnapshot.empty) {
-      console.error('Użytkownik już istnieje:', email);
       res.status(400).json({
         success: false,
         error: 'Użytkownik z tym adresem email już istnieje'
@@ -107,11 +56,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Create password hash
-    console.log('Tworzę hash hasła...');
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Create new user
+    // Create new user - ALREADY VERIFIED
     const userData = {
       email,
       passwordHash,
@@ -123,49 +71,38 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         coordinates: location.coordinates,
         address: location.address
       },
-      isVerified: false,
+      isVerified: true, // Automatycznie zweryfikowany
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
-    console.log('Zapisuję użytkownika do Firestore...');
-    console.log('User data (without password):', { ...userData, passwordHash: '[HIDDEN]' });
-
     // Save user to Firestore
     const userRef = await usersCollection.add(userData);
     console.log('Użytkownik zapisany z ID:', userRef.id);
-    
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    console.log('Wygenerowany token weryfikacyjny');
-    
-    // Save token to database
+
+    // Generate JWT tokens immediately (no email verification needed)
+    const token = jwt.sign(
+      { userId: userRef.id }, 
+      JWT_SECRET, 
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    const refreshToken = jwt.sign(
+      { userId: userRef.id }, 
+      JWT_REFRESH_SECRET, 
+      { expiresIn: JWT_REFRESH_EXPIRES_IN }
+    );
+
+    // Save refresh token to database
     await tokensCollection.add({
       user: userRef.id,
-      token: verificationToken,
-      type: 'email-verification',
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      token: refreshToken,
+      type: 'refresh',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    console.log('Token weryfikacyjny zapisany');
-
- // Send verification email
-    const verificationUrl = `${config.frontendUrl}/verify-email?token=${verificationToken}`;
-    
-    try {
-      await emailService.sendVerificationEmail({
-        to: email,
-        name: fullName,
-        verificationUrl
-      });
-      console.log(`Verification email sent to ${email}`);
-    } catch (emailError) {
-      console.error('Failed to send verification email:', emailError);
-      // Nie przerywamy rejestracji, nawet jeśli email się nie wyśle
-    }
-
-    // Return success response without sensitive data
+    // Return success response with tokens
     const responseData = {
       success: true,
       data: {
@@ -174,10 +111,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
           email: userData.email,
           fullName: userData.fullName,
           role: userData.role,
+          phoneNumber: userData.phoneNumber,
+          location: userData.location,
           isVerified: userData.isVerified
-        }
+        },
+        token,
+        refreshToken
       },
-      message: 'Rejestracja zakończona sukcesem. Sprawdź swoją skrzynkę email, aby zweryfikować konto.'
+      message: 'Rejestracja zakończona sukcesem. Możesz się teraz zalogować.'
     };
 
     console.log('Wysyłam odpowiedź sukcesu:', responseData);
@@ -188,18 +129,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     console.error('=== REJESTRACJA - BŁĄD ===');
     console.error('Register error:', error);
     
-    // Log more details about the error
-    if (error instanceof Error) {
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-    }
-
     res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas rejestracji. Spróbuj ponownie później.'
     });
-    console.log('=== REJESTRACJA - KONIEC BŁĄD ===');
   }
 };
 
@@ -236,14 +169,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Check if email is verified
-    if (!userData.isVerified) {
-      res.status(401).json({
-        success: false,
-        error: 'Konto nie zostało zweryfikowane. Sprawdź swoją skrzynkę email.'
-      });
-      return;
-    }
+    // Usunęliśmy sprawdzanie weryfikacji email
+    // User is automatically verified upon registration
 
     // Generate JWT token
     const token = jwt.sign(
@@ -297,6 +224,170 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas logowania. Spróbuj ponownie później.'
+    });
+  }
+};
+
+/**
+ * Request password reset - FUNKCJA RESETOWANIA HASŁA
+ */
+export const requestPasswordReset = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({
+        success: false,
+        error: 'Email jest wymagany'
+      });
+      return;
+    }
+
+    // Find user by email
+    const userSnapshot = await usersCollection.where('email', '==', email).get();
+    
+    // Don't reveal if user exists for security reasons
+    if (userSnapshot.empty) {
+      res.json({
+        success: true,
+        data: { sent: true },
+        message: 'Jeśli konto o podanym adresie email istnieje, zostanie wysłany link do resetowania hasła.'
+      });
+      return;
+    }
+
+    const userDoc = userSnapshot.docs[0];
+    const userData = userDoc.data();
+    
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    
+    // Save token to database
+    await tokensCollection.add({
+      user: userDoc.id,
+      token: resetToken,
+      type: 'password-reset',
+      expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000), // 1 hour
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Send password reset email
+    const resetUrl = `${config.frontendUrl}/reset-password?token=${resetToken}`;
+    
+    try {
+      await emailService.sendPasswordResetEmail({
+        to: email,
+        name: userData.fullName,
+        resetUrl
+      });
+      console.log(`Password reset email sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      // Continue anyway - don't reveal email sending errors
+    }
+
+    res.json({
+      success: true,
+      data: { sent: true },
+      message: 'Link do resetowania hasła został wysłany na podany adres email.'
+    });
+  } catch (error) {
+    console.error('Password reset request error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Wystąpił błąd podczas przetwarzania żądania. Spróbuj ponownie później.'
+    });
+  }
+};
+
+/**
+ * Reset password with token
+ */
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      res.status(400).json({
+        success: false,
+        error: 'Brak tokenu lub nowego hasła'
+      });
+      return;
+    }
+
+    // Find token in database
+    const tokenSnapshot = await tokensCollection
+      .where('token', '==', token)
+      .where('type', '==', 'password-reset')
+      .get();
+
+    if (tokenSnapshot.empty) {
+      res.status(400).json({
+        success: false,
+        error: 'Nieprawidłowy lub wygasły token resetowania hasła'
+      });
+      return;
+    }
+
+    const tokenDoc = tokenSnapshot.docs[0];
+    const tokenData = tokenDoc.data();
+    
+    // Check if token is expired
+    if (tokenData.expiresAt.toDate() < new Date()) {
+      await tokenDoc.ref.delete();
+      res.status(400).json({
+        success: false,
+        error: 'Token resetowania hasła wygasł'
+      });
+      return;
+    }
+
+    // Find user
+    const userDoc = await usersCollection.doc(tokenData.user).get();
+    
+    if (!userDoc.exists) {
+      res.status(404).json({
+        success: false,
+        error: 'Użytkownik nie istnieje'
+      });
+      return;
+    }
+
+    // Create new password hash
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    // Update user password
+    await userDoc.ref.update({
+      passwordHash,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Remove token
+    await tokenDoc.ref.delete();
+
+    // Remove all refresh tokens for this user (logout from all devices)
+    const refreshTokensSnapshot = await tokensCollection
+      .where('user', '==', userDoc.id)
+      .where('type', '==', 'refresh')
+      .get();
+    
+    const batch = db.batch();
+    refreshTokensSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+
+    res.json({
+      success: true,
+      data: { success: true },
+      message: 'Hasło zostało pomyślnie zresetowane. Możesz się teraz zalogować używając nowego hasła.'
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Wystąpił błąd podczas resetowania hasła. Spróbuj ponownie później.'
     });
   }
 };
@@ -405,239 +496,6 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas odświeżania tokenu. Spróbuj ponownie później.'
-    });
-  }
-};
-
-/**
- * Verify email with token
- */
-export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { token } = req.body;
-
-    if (!token) {
-      res.status(400).json({
-        success: false,
-        error: 'Brak tokenu weryfikacyjnego'
-      });
-      return;
-    }
-
-    // Find token in database
-    const tokenSnapshot = await tokensCollection
-      .where('token', '==', token)
-      .where('type', '==', 'email-verification')
-      .get();
-
-    if (tokenSnapshot.empty) {
-      res.status(400).json({
-        success: false,
-        error: 'Nieprawidłowy lub wygasły token weryfikacyjny'
-      });
-      return;
-    }
-
-    const tokenDoc = tokenSnapshot.docs[0];
-    const tokenData = tokenDoc.data();
-    
-    // Check if token is expired
-    if (tokenData.expiresAt.toDate() < new Date()) {
-      await tokenDoc.ref.delete();
-      res.status(400).json({
-        success: false,
-        error: 'Token weryfikacyjny wygasł'
-      });
-      return;
-    }
-
-    // Find user and update verification status
-    const userDoc = await usersCollection.doc(tokenData.user).get();
-    
-    if (!userDoc.exists) {
-      res.status(404).json({
-        success: false,
-        error: 'Użytkownik nie istnieje'
-      });
-      return;
-    }
-
-    // Update verification status
-    await userDoc.ref.update({
-      isVerified: true,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Remove token
-    await tokenDoc.ref.delete();
-
-    // Return success
-    res.json({
-      success: true,
-      data: {
-        verified: true
-      },
-      message: 'Adres email został pomyślnie zweryfikowany'
-    });
-  } catch (error) {
-    console.error('Email verification error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas weryfikacji adresu email. Spróbuj ponownie później.'
-    });
-  }
-};
-
-/**
- * Request password reset
- */
-export const requestPasswordReset = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { email } = req.body;
-
-    // Find user by email
-    const userSnapshot = await usersCollection.where('email', '==', email).get();
-    
-    // Don't reveal if user exists for security reasons
-    if (userSnapshot.empty) {
-      res.json({
-        success: true,
-        data: {
-          sent: true
-        },
-        message: 'Jeśli konto o podanym adresie email istnieje, na skrzynkę pocztową zostanie wysłany link do resetowania hasła.'
-      });
-      return;
-    }
-
-    const userDoc = userSnapshot.docs[0];
-    
-    // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    
-    // Save token to database
-    await tokensCollection.add({
-      user: userDoc.id,
-      token: resetToken,
-      type: 'password-reset',
-      expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000), // 1 hour
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Send password reset email (implementation will vary)
-    const resetUrl = `${config.frontendUrl}/reset-password?token=${resetToken}`;
-    
-    // Mock email service call for now
-    console.log(`Sending password reset email to ${email} with URL: ${resetUrl}`);
-
-    // Return success
-    res.json({
-      success: true,
-      data: {
-        sent: true
-      },
-      message: 'Link do resetowania hasła został wysłany na podany adres email.'
-    });
-  } catch (error) {
-    console.error('Password reset request error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas przetwarzania żądania. Spróbuj ponownie później.'
-    });
-  }
-};
-
-/**
- * Reset password with token
- */
-export const resetPassword = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { token, newPassword } = req.body;
-
-    if (!token || !newPassword) {
-      res.status(400).json({
-        success: false,
-        error: 'Brak tokenu lub nowego hasła'
-      });
-      return;
-    }
-
-    // Find token in database
-    const tokenSnapshot = await tokensCollection
-      .where('token', '==', token)
-      .where('type', '==', 'password-reset')
-      .get();
-
-    if (tokenSnapshot.empty) {
-      res.status(400).json({
-        success: false,
-        error: 'Nieprawidłowy lub wygasły token resetowania hasła'
-      });
-      return;
-    }
-
-    const tokenDoc = tokenSnapshot.docs[0];
-    const tokenData = tokenDoc.data();
-    
-    // Check if token is expired
-    if (tokenData.expiresAt.toDate() < new Date()) {
-      await tokenDoc.ref.delete();
-      res.status(400).json({
-        success: false,
-        error: 'Token resetowania hasła wygasł'
-      });
-      return;
-    }
-
-    // Find user
-    const userDoc = await usersCollection.doc(tokenData.user).get();
-    
-    if (!userDoc.exists) {
-      res.status(404).json({
-        success: false,
-        error: 'Użytkownik nie istnieje'
-      });
-      return;
-    }
-
-    // Create new password hash
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(newPassword, salt);
-
-    // Update user password
-    await userDoc.ref.update({
-      passwordHash,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Remove token
-    await tokenDoc.ref.delete();
-
-    // Remove all refresh tokens for this user (logout from all devices)
-    const refreshTokensSnapshot = await tokensCollection
-      .where('user', '==', userDoc.id)
-      .where('type', '==', 'refresh')
-      .get();
-    
-    const batch = db.batch();
-    refreshTokensSnapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    await batch.commit();
-
-    // Return success
-    res.json({
-      success: true,
-      data: {
-        success: true
-      },
-      message: 'Hasło zostało pomyślnie zresetowane. Możesz się teraz zalogować używając nowego hasła.'
-    });
-  } catch (error) {
-    console.error('Password reset error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Wystąpił błąd podczas resetowania hasła. Spróbuj ponownie później.'
     });
   }
 };
