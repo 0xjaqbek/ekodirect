@@ -1,4 +1,4 @@
-// Updated src/shared/api/index.ts with environment detection
+// src/shared/api/index.ts - Enhanced with detailed logging
 
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { STORAGE_KEYS } from '../constants';
@@ -56,6 +56,11 @@ const getApiUrl = (): string => {
 const API_BASE_URL = getApiUrl();
 const API_TIMEOUT = 15000; // 15 sekund
 
+console.log('🔗 API Client Configuration:');
+console.log('- Base URL:', API_BASE_URL);
+console.log('- Timeout:', API_TIMEOUT);
+console.log('- Environment:', isBrowser ? 'Browser' : 'Node.js');
+
 // Domyślna konfiguracja dla instancji axios
 const axiosConfig: AxiosRequestConfig = {
   baseURL: API_BASE_URL,
@@ -98,12 +103,29 @@ const removeStorageItem = (key: string): void => {
 axiosInstance.interceptors.request.use(
   (config) => {
     const token = getStorageItem(STORAGE_KEYS.TOKEN);
+    
+    // Enhanced request logging
+    console.log('🚀 API Request:', {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      baseURL: config.baseURL,
+      fullURL: `${config.baseURL}${config.url}`,
+      hasToken: !!token,
+      headers: config.headers,
+      data: config.data ? (config.data.password ? { ...config.data, password: '[HIDDEN]' } : config.data) : undefined
+    });
+    
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('✅ Added Authorization header');
+    } else if (!token) {
+      console.log('⚠️ No token found in storage');
     }
+    
     return config;
   },
   (error) => {
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
@@ -113,8 +135,25 @@ axiosInstance.interceptors.request.use(
  * - Obsługuje globalne zarządzanie błędami i odświeżanie tokenów
  */
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Enhanced response logging
+    console.log('✅ API Response:', {
+      status: response.status,
+      statusText: response.statusText,
+      url: response.config.url,
+      data: response.data
+    });
+    return response;
+  },
   async (error: AxiosError<ErrorResponseData>) => {
+    console.error('❌ API Response Error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      message: error.message,
+      responseData: error.response?.data
+    });
+    
     const originalRequest = error.config;
     
     // Obsługa wygaśnięcia tokenu - próba odświeżenia (tylko w browser)
@@ -125,6 +164,7 @@ axiosInstance.interceptors.response.use(
       !(originalRequest as { _retry?: boolean })._retry &&
       error.response.data?.message === 'Token expired'
     ) {
+      console.log('🔄 Attempting token refresh...');
       (originalRequest as { _retry?: boolean })._retry = true;
       
       try {
@@ -133,6 +173,7 @@ axiosInstance.interceptors.response.use(
         const response = await axios.post<{ token: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
         
         if (response.data.token) {
+          console.log('✅ Token refreshed successfully');
           setStorageItem(STORAGE_KEYS.TOKEN, response.data.token);
           
           // Ponowna próba oryginalnego żądania z nowym tokenem
@@ -142,6 +183,7 @@ axiosInstance.interceptors.response.use(
           return axiosInstance(originalRequest);
         }
       } catch (refreshError) {
+        console.error('❌ Token refresh failed:', refreshError);
         // Jeśli odświeżenie tokenu nie powiodło się, wyloguj użytkownika
         removeStorageItem(STORAGE_KEYS.TOKEN);
         removeStorageItem(STORAGE_KEYS.USER);
@@ -159,9 +201,13 @@ axiosInstance.interceptors.response.use(
     let errorMessage = 'Wystąpił nieoczekiwany błąd';
     if (error.response?.data?.message) {
       errorMessage = error.response.data.message;
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error;
     } else if (error.message) {
       errorMessage = error.message;
     }
+    
+    console.error('📋 Final error message:', errorMessage);
     
     // Tworzenie standardowej odpowiedzi błędu
     const formattedError: ApiResponse<null> = {

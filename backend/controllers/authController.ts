@@ -5,7 +5,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { admin } from '../firebase';
 import { config } from '../config';
-
+import { emailService } from '../services/emailService';
 // Initialize Firestore
 const db = admin.firestore();
 const usersCollection = db.collection('users');
@@ -150,11 +150,20 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     console.log('Token weryfikacyjny zapisany');
 
-    // Send verification email (implementation will vary)
+ // Send verification email
     const verificationUrl = `${config.frontendUrl}/verify-email?token=${verificationToken}`;
     
-    // Mock email service call for now
-    console.log(`Sending verification email to ${email} with URL: ${verificationUrl}`);
+    try {
+      await emailService.sendVerificationEmail({
+        to: email,
+        name: fullName,
+        verificationUrl
+      });
+      console.log(`Verification email sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Nie przerywamy rejestracji, nawet jeśli email się nie wyśle
+    }
 
     // Return success response without sensitive data
     const responseData = {
