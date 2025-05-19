@@ -1,4 +1,4 @@
-// backend/controllers/authController.ts (Fixed version)
+// backend/controllers/authController.ts - Wersja z lepszym logowaniem
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
@@ -21,12 +21,84 @@ const JWT_REFRESH_EXPIRES_IN = '7d';
  */
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('=== REJESTRACJA - START ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Request headers:', req.headers);
+
     const { email, password, fullName, role, phoneNumber, location } = req.body;
 
+    // Detailed validation logging
+    console.log('Extracted fields:');
+    console.log('- email:', email);
+    console.log('- password:', password ? '[HIDDEN]' : 'MISSING');
+    console.log('- fullName:', fullName);
+    console.log('- role:', role);
+    console.log('- phoneNumber:', phoneNumber);
+    console.log('- location:', location);
+
+    // Validate required fields
+    if (!email) {
+      console.error('Missing email');
+      res.status(400).json({
+        success: false,
+        error: 'Email jest wymagany'
+      });
+      return;
+    }
+
+    if (!password) {
+      console.error('Missing password');
+      res.status(400).json({
+        success: false,
+        error: 'Hasło jest wymagane'
+      });
+      return;
+    }
+
+    if (!fullName) {
+      console.error('Missing fullName');
+      res.status(400).json({
+        success: false,
+        error: 'Imię i nazwisko jest wymagane'
+      });
+      return;
+    }
+
+    if (!role) {
+      console.error('Missing role');
+      res.status(400).json({
+        success: false,
+        error: 'Rola jest wymagana'
+      });
+      return;
+    }
+
+    if (!phoneNumber) {
+      console.error('Missing phoneNumber');
+      res.status(400).json({
+        success: false,
+        error: 'Numer telefonu jest wymagany'
+      });
+      return;
+    }
+
+    if (!location || !location.coordinates || !location.address) {
+      console.error('Missing or invalid location:', location);
+      res.status(400).json({
+        success: false,
+        error: 'Lokalizacja jest wymagana'
+      });
+      return;
+    }
+
+    console.log('Wszystkie pola przeszły walidację');
+
     // Check if user with this email already exists
+    console.log('Sprawdzam czy użytkownik z emailem już istnieje...');
     const userSnapshot = await usersCollection.where('email', '==', email).get();
     
     if (!userSnapshot.empty) {
+      console.error('Użytkownik już istnieje:', email);
       res.status(400).json({
         success: false,
         error: 'Użytkownik z tym adresem email już istnieje'
@@ -35,6 +107,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Create password hash
+    console.log('Tworzę hash hasła...');
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
@@ -55,11 +128,16 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
+    console.log('Zapisuję użytkownika do Firestore...');
+    console.log('User data (without password):', { ...userData, passwordHash: '[HIDDEN]' });
+
     // Save user to Firestore
     const userRef = await usersCollection.add(userData);
+    console.log('Użytkownik zapisany z ID:', userRef.id);
     
     // Generate verification token
     const verificationToken = crypto.randomBytes(32).toString('hex');
+    console.log('Wygenerowany token weryfikacyjny');
     
     // Save token to database
     await tokensCollection.add({
@@ -70,6 +148,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
+    console.log('Token weryfikacyjny zapisany');
+
     // Send verification email (implementation will vary)
     const verificationUrl = `${config.frontendUrl}/verify-email?token=${verificationToken}`;
     
@@ -77,7 +157,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     console.log(`Sending verification email to ${email} with URL: ${verificationUrl}`);
 
     // Return success response without sensitive data
-    res.status(201).json({
+    const responseData = {
       success: true,
       data: {
         user: {
@@ -89,13 +169,28 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         }
       },
       message: 'Rejestracja zakończona sukcesem. Sprawdź swoją skrzynkę email, aby zweryfikować konto.'
-    });
+    };
+
+    console.log('Wysyłam odpowiedź sukcesu:', responseData);
+    res.status(201).json(responseData);
+    console.log('=== REJESTRACJA - KONIEC SUKCES ===');
+
   } catch (error) {
+    console.error('=== REJESTRACJA - BŁĄD ===');
     console.error('Register error:', error);
+    
+    // Log more details about the error
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+
     res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas rejestracji. Spróbuj ponownie później.'
     });
+    console.log('=== REJESTRACJA - KONIEC BŁĄD ===');
   }
 };
 
