@@ -1,18 +1,29 @@
-// backend/tsconfig.json
 {
     "compilerOptions": {
       "target": "ES2020",
-      "module": "CommonJS",
-      "rootDir": "../", // Change this to point to the project root
+      "module": "ESNext",
+      "rootDir": "./",
       "outDir": "./dist",
       "esModuleInterop": true,
+      "allowSyntheticDefaultImports": true,
       "strict": true,
       "skipLibCheck": true,
       "forceConsistentCasingInFileNames": true,
-      "baseUrl": "..",  // Set this to project root
+      "moduleResolution": "node",
+      "resolveJsonModule": true,
+      "declaration": true,
+      "declarationMap": true,
+      "sourceMap": true,
+      "noEmitOnError": true,
+      "allowJs": true,
+      "baseUrl": "./",
       "paths": {
-        "@shared/*": ["src/shared/*"]  // Add path mapping for shared
+        "@shared/*": ["../src/shared/*"]
       }
+    },
+    "ts-node": {
+      "esm": true,
+      "experimentalSpecifierResolution": "node"
     },
     "include": ["**/*.ts"],
     "exclude": ["node_modules", "dist"]

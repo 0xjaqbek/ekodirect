@@ -1,9 +1,9 @@
-// backend/middleware/products.ts - Fixed version
+// backend/middleware/products.ts - Fixed version with correct imports
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
-import { VALIDATION } from '../../src/shared/constants';
-import { productsCollection } from '../models/collections';
-import type { FirestoreProduct } from '../types';
+import { VALIDATION } from '../shared/constants.js';
+import { productsCollection } from '../models/collections.js';
+import type { FirestoreProduct } from '../types/index.js';
 
 // Extend Express Request type using module augmentation
 declare module 'express' {

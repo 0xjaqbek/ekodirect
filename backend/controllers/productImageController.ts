@@ -1,7 +1,7 @@
 // backend/controllers/productImageController.ts - Fixed version
 import { Request, Response } from 'express';
-import { admin } from '../firebase';
-import { VALIDATION } from '../../src/shared/constants';
+import { admin } from '../firebase.js';
+import { VALIDATION } from '../shared/constants.js';
 
 // Initialize Firestore
 const db = admin.firestore();

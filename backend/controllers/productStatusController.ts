@@ -1,7 +1,7 @@
 // backend/controllers/productStatusController.ts - Fixed version
 import { Request, Response } from 'express';
-import { admin } from '../firebase';
-import { PRODUCT_STATUSES } from '../../src/shared/constants';
+import { admin } from '../firebase.js';
+import { PRODUCT_STATUSES } from '../shared/constants.js';
 
 // Initialize Firestore
 const db = admin.firestore();
