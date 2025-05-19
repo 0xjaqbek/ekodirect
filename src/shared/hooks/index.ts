@@ -1,6 +1,6 @@
 // shared/hooks/index.ts
 
-import { useState, useEffect, useCallback, RefObject } from 'react';
+import { useState, useEffect, useCallback, type RefObject } from 'react';
 import { STORAGE_KEYS } from '../constants';
 
 /**
