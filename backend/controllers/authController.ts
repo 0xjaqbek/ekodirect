@@ -1,4 +1,4 @@
-// backend/controllers/authController.ts - Bez weryfikacji email
+// backend/controllers/authController.ts - Bez weryfikacji email + verifyEmail function
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
@@ -224,6 +224,42 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({
       success: false,
       error: 'Wystąpił błąd podczas logowania. Spróbuj ponownie później.'
+    });
+  }
+};
+
+/**
+ * Verify email with token - PLACEHOLDER FUNCTION
+ * Since email verification is disabled, this function just returns success
+ */
+export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      res.status(400).json({
+        success: false,
+        error: 'Brak tokenu weryfikacyjnego'
+      });
+      return;
+    }
+
+    // Since email verification is disabled, we'll just return success
+    // In a real implementation, you would:
+    // 1. Verify the token
+    // 2. Update user's isVerified status to true
+    // 3. Remove the verification token
+
+    res.json({
+      success: true,
+      data: { verified: true },
+      message: 'Email został zweryfikowany pomyślnie.'
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Wystąpił błąd podczas weryfikacji email. Spróbuj ponownie później.'
     });
   }
 };
