@@ -1,4 +1,4 @@
-// backend/server.ts (Fixed version)
+// backend/server.ts (Updated version with orders and payments routes)
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -13,6 +13,8 @@ import './firebase';
 import authRoutes from './routes/auth';
 import productRoutes from './routes/products';
 import userRoutes from './routes/users';
+import orderRoutes from './routes/orders';
+import paymentRoutes from './routes/payments';
 
 // Initialize Express app
 const app = express();
@@ -36,6 +38,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Main route for testing API
 app.get('/', (req: Request, res: Response) => {
