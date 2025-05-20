@@ -34,6 +34,28 @@ const defaultFilters: ProductFilterParams = {
   sortOrder: 'desc'
 };
 
+// Helper function to transform ProductFilterParams to RequestParams
+const transformFilters = (filters: ProductFilterParams): Record<string, string | number | boolean | undefined | null> => {
+  const { location, ...otherFilters } = filters;
+  
+  const transformed: Record<string, string | number | boolean | undefined | null> = {};
+  
+  // Copy all non-location filters
+  Object.entries(otherFilters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      transformed[key] = value;
+    }
+  });
+  
+  // Handle location separately - convert [lng, lat] to separate parameters
+  if (location && Array.isArray(location) && location.length === 2) {
+    transformed.lng = location[0]; // longitude
+    transformed.lat = location[1]; // latitude
+  }
+  
+  return transformed;
+};
+
 // Create the products store with Zustand
 export const useProductsStore = create<ProductsState>((set, get) => ({
     // Initial state
@@ -43,28 +65,6 @@ export const useProductsStore = create<ProductsState>((set, get) => ({
     filters: { ...defaultFilters },
     isLoading: false,
     error: null,
-    
-    // Helper function to transform ProductFilterParams to RequestParams
-    transformFilters: (filters: ProductFilterParams): Record<string, string | number | boolean | undefined | null> => {
-      const { location, ...otherFilters } = filters;
-      
-      const transformed: Record<string, string | number | boolean | undefined | null> = {};
-      
-      // Copy all non-location filters
-      Object.entries(otherFilters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          transformed[key] = value;
-        }
-      });
-      
-      // Handle location separately - convert [lng, lat] to separate parameters
-      if (location && Array.isArray(location) && location.length === 2) {
-        transformed.lng = location[0]; // longitude
-        transformed.lat = location[1]; // latitude
-      }
-      
-      return transformed;
-    },
     
     // Fetch products with optional filter parameters
     fetchProducts: async (params?: Partial<ProductFilterParams>) => {
@@ -79,7 +79,7 @@ export const useProductsStore = create<ProductsState>((set, get) => ({
         set({ filters: updatedFilters });
         
         // Transform filters to handle location array
-        const transformedFilters = get().transformFilters(updatedFilters);
+        const transformedFilters = transformFilters(updatedFilters);
         
         // Make API request
         const response = await apiClient.get<{
